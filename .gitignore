@@ -1,0 +1,30 @@
+node_modules/
+dist/
+coverage/
+.DS_Store
+
+.env
+.env.*
+*.local
+
+# Internal agent/project operation artifacts are kept local and are not needed
+# for the public GitHub Pages app build.
+AGENTS.md
+CLAUDE.md
+00_PROJECT_BRIEF.md
+01_DECISIONS.md
+goal.md
+plan.md
+status.md
+test.md
+platform.md
+ai/
+stages/
+graphify-out/
+.graphifyignore
+.agents/
+.antigravity-task-*.md
+.claude/
+.codex/
+.hermes/
+.understand-anything/
