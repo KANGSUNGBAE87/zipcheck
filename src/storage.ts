@@ -1,7 +1,7 @@
 import type { AlertItem, CaseItem, HistoryEvent, Locale, PhaseKey, Template } from './domain';
 
-const CASES_KEY = 'non-game-market-insights:v2';
-const EVENTS_KEY = 'non-game-market-insights:events:v1';
+export const CASES_KEY = 'non-game-market-insights:v2';
+export const EVENTS_KEY = 'non-game-market-insights:events:v1';
 
 export const createEvent = (type: HistoryEvent['type'], partial: Partial<HistoryEvent> = {}): HistoryEvent => ({
   id: crypto.randomUUID(),

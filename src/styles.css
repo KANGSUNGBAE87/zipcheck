@@ -228,12 +228,41 @@ textarea {
   font-weight: 800;
 }
 
+.pill.remote .dot {
+  background: #2563eb;
+  box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.12);
+}
+
 .dot {
   width: 8px;
   height: 8px;
   border-radius: 999px;
   background: var(--success);
   box-shadow: 0 0 0 4px rgba(27, 112, 89, 0.12);
+}
+
+.auth-btn {
+  white-space: nowrap;
+}
+
+.sync-message {
+  display: inline-flex;
+  max-width: min(100%, 640px);
+  margin-top: 12px;
+  padding: 9px 12px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.82);
+  color: var(--text-muted);
+  font-size: 0.86rem;
+  font-weight: 700;
+  line-height: 1.45;
+}
+
+.sync-message.error {
+  border-color: rgba(183, 106, 18, 0.32);
+  background: var(--warning-bg);
+  color: var(--warning);
 }
 
 .icon-btn {

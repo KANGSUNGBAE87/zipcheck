@@ -26,6 +26,7 @@ describe('App broker checklist MVP', () => {
     expect(screen.getByText('남은 확인')).toBeInTheDocument();
     expect(screen.getByText('완료')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: '설정' })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '토스 로그인' })).toBeDisabled();
     expect(screen.getAllByRole('button', { name: '새 거래 시작' }).length).toBeGreaterThan(0);
     expect(screen.getAllByRole('button', { name: '샘플 거래로 둘러보기' }).length).toBeGreaterThan(0);
     expect(screen.queryByText(/진행 중 거래 ·/)).not.toBeInTheDocument();
@@ -68,7 +69,7 @@ describe('App broker checklist MVP', () => {
     expect(stored).toHaveLength(1);
     expect(stored[0].history.some((event: { type: string; payload?: { firstEntry?: boolean; locale?: string } }) => event.type === 'session_start' && event.payload?.firstEntry && event.payload?.locale === 'en')).toBe(true);
     expect(screen.getAllByText(/Next item/).length).toBeGreaterThan(0);
-    expect(screen.getAllByText('Deal titles and memos are stored on this device only.')[0]).toBeInTheDocument();
+    expect(screen.getAllByText('Before Toss login, deal titles and memos stay on this device. After connection, they sync to Supabase.')[0]).toBeInTheDocument();
     expect(screen.queryByText('Back')).not.toBeInTheDocument();
     const analytics = JSON.parse(localStorage.getItem('non-game-market-insights:events:v1') ?? '[]');
     expect(analytics.some((event: { type: string; payload?: { locale?: string; phaseKey?: string } }) => event.type === 'phase_viewed' && event.payload?.phaseKey === 'pre_contract' && event.payload?.locale === 'en')).toBe(true);
@@ -112,11 +113,11 @@ describe('App broker checklist MVP', () => {
 
     expect(screen.getAllByText('0 / 12 완료')[0]).toBeInTheDocument();
     expect(screen.getAllByText('잔금일 참고').length).toBeGreaterThan(0);
-    expect(screen.getAllByText('거래명과 메모는 이 기기에만 저장됩니다.')[0]).toBeInTheDocument();
+    expect(screen.getAllByText('토스 로그인 연결 전에는 이 기기에 임시 저장되고, 연결 후에는 Supabase에 저장됩니다.')[0]).toBeInTheDocument();
     expect(screen.getByText('완료에 포함되지 않는 참고자료 4개')).toBeInTheDocument();
     expect(screen.getAllByRole('button').some((button) => button.textContent === '○')).toBe(true);
     expect(screen.getByText('완료에 포함되지 않는 참고자료 4개')).toBeInTheDocument();
-    expect(screen.getAllByText('거래명과 메모는 이 기기에만 저장됩니다.')[0]).toBeInTheDocument();
+    expect(screen.getAllByText('토스 로그인 연결 전에는 이 기기에 임시 저장되고, 연결 후에는 Supabase에 저장됩니다.')[0]).toBeInTheDocument();
     expect(screen.getAllByText('계약 전').length).toBeGreaterThan(0);
 
     // Verify accessibility label for reference-only button
@@ -188,7 +189,7 @@ describe('App broker checklist MVP', () => {
     fireEvent.change(screen.getByRole('textbox', { name: '거래명' }), { target: { value: 'undo 검증' } });
     clickButtonByText('새 거래 시작');
 
-    expect(screen.getAllByText('거래명과 메모는 이 기기에만 저장됩니다.')[0]).toBeInTheDocument();
+    expect(screen.getAllByText('토스 로그인 연결 전에는 이 기기에 임시 저장되고, 연결 후에는 Supabase에 저장됩니다.')[0]).toBeInTheDocument();
 
     fireEvent.click(screen.getAllByRole('button', { name: /완료하기/ })[0]);
     expect(screen.getByText('완료 직후에는 바로 되돌릴 수 있습니다.')).toBeInTheDocument();

@@ -5,6 +5,7 @@ coverage/
 
 .env
 .env.*
+!.env.example
 *.local
 
 # Internal agent/project operation artifacts are kept local and are not needed
@@ -28,3 +29,5 @@ graphify-out/
 .codex/
 .hermes/
 .understand-anything/
+.gstack/
+supabase/.temp/

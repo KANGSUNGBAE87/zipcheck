@@ -1,15 +1,17 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { copy, t } from './i18n';
 import { TEMPLATE, type AlertItem, type CaseItem, type HistoryEvent, type Locale, type Memo, type PhaseKey } from './domain';
-import { appendAnalyticsEvent, createBlankCase, createEvent, loadCases, recomputeActivePhaseKey, saveCases } from './storage';
+import { createDefaultBackend } from './backend/defaultBackend';
+import { createBlankCase, createEvent, recomputeActivePhaseKey } from './storage';
 
 const emitLocaleEvent = (
-  history: ReturnType<typeof createEvent>[],
+  history: HistoryEvent[],
   eventType: 'phase_viewed' | 'alert_viewed' | 'memo_opened',
   payload: Record<string, string | number | boolean>,
+  appendEvent: (event: HistoryEvent) => void,
 ) => {
   const event = createEvent(eventType, { payload });
-  appendAnalyticsEvent(event);
+  appendEvent(event);
   return [...history, event];
 };
 
@@ -44,8 +46,15 @@ const eventLabel = (locale: Locale, event: HistoryEvent) => {
 };
 
 function App() {
+  const backend = useMemo(() => createDefaultBackend(), []);
+  const repository = backend.repository;
+  const authAdapter = backend.authAdapter;
   const [locale, setLocale] = useState<Locale>('ko');
   const [cases, setCases] = useState<CaseItem[]>([]);
+  const [repositoryStatus, setRepositoryStatus] = useState(() => repository.getStatus());
+  const [syncMessage, setSyncMessage] = useState(() => repository.getStatus().message ?? '');
+  const [tossLoginState, setTossLoginState] = useState<'idle' | 'loading' | 'connected' | 'error'>('idle');
+  const userMutatedBeforeLoad = useRef(false);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [draftTitle, setDraftTitle] = useState('');
   const [draftMemo, setDraftMemo] = useState('');
@@ -78,8 +87,29 @@ function App() {
     };
   }, []);
 
-  useEffect(() => setCases(loadCases()), []);
-  useEffect(() => { saveCases(cases); }, [cases]);
+  const appendAnalyticsEventSafe = useCallback((event: HistoryEvent) => {
+    void repository.appendAnalyticsEvent(event).catch((error) => {
+      setSyncMessage(error instanceof Error ? error.message : copy[locale].sync_event_failed);
+    });
+  }, [locale, repository]);
+
+  useEffect(() => {
+    let alive = true;
+    repository.loadCases()
+      .then((loadedCases) => {
+        if (!alive) return;
+        if (!userMutatedBeforeLoad.current) setCases(loadedCases);
+        const status = repository.getStatus();
+        setRepositoryStatus(status);
+        setSyncMessage(status.message ?? '');
+      })
+      .catch((error) => {
+        if (!alive) return;
+        setSyncMessage(error instanceof Error ? error.message : copy[locale].sync_load_failed);
+      });
+    return () => { alive = false; };
+  }, [locale, repository]);
+
   useEffect(() => {
     if (!selectedId && cases[0]) setSelectedId(cases[0].id);
   }, [cases, selectedId]);
@@ -116,7 +146,14 @@ function App() {
     });
   }, [cases, filter, searchTerm, selectedId]);
 
-  const mutate = (updater: (list: CaseItem[]) => CaseItem[]) => setCases((prev) => updater(prev).map((item) => ({ ...item, updatedAt: new Date().toISOString() })));
+  const mutate = (updater: (list: CaseItem[]) => CaseItem[]) => setCases((prev) => {
+    const next = updater(prev).map((item) => ({ ...item, updatedAt: new Date().toISOString() }));
+    userMutatedBeforeLoad.current = true;
+    void repository.saveCases(next)
+      .then(() => setRepositoryStatus(repository.getStatus()))
+      .catch((error) => setSyncMessage(error instanceof Error ? error.message : copy[locale].sync_save_failed));
+    return next;
+  });
 
   const openCase = (caseId: string, source: 'case_list' | 'history_anchor' = 'case_list') => {
     setSelectedId(caseId);
@@ -196,9 +233,29 @@ function App() {
       const history = [...item.history, createEvent('memo_saved', { caseId: item.id, alertId: memoTarget === 'case' ? undefined : memoTarget, payload: { target: memoTarget === 'case' ? 'case' : 'alert', hasText: true, ...localePayload(locale) } })];
       return { ...item, memos, alerts, history };
     }));
-    appendAnalyticsEvent(createEvent('memo_saved', { caseId: selected.id, payload: { target: memoTarget === 'case' ? 'case' : 'alert', ...localePayload(locale) } }));
+    appendAnalyticsEventSafe(createEvent('memo_saved', { caseId: selected.id, payload: { target: memoTarget === 'case' ? 'case' : 'alert', ...localePayload(locale) } }));
     setDraftMemo('');
     setSheetOpen(false);
+  };
+
+  const connectTossLogin = async () => {
+    setTossLoginState('loading');
+    setSyncMessage(copy[locale].toss_login_progress);
+    try {
+      const result = await authAdapter.signInWithToss();
+      setTossLoginState('connected');
+      setSyncMessage(result.linked ? copy[locale].toss_login_connected : copy[locale].toss_login_not_linked);
+      appendAnalyticsEventSafe(createEvent('toss_login_linked', {
+        payload: {
+          linked: result.linked,
+          hasCoreUserId: Boolean(result.coreUserId),
+          ...localePayload(locale),
+        },
+      }));
+    } catch (error) {
+      setTossLoginState('error');
+      setSyncMessage(error instanceof Error ? `${copy[locale].toss_login_failed} ${error.message}` : copy[locale].toss_login_failed);
+    }
   };
 
   const openReference = (alert: AlertItem) => {
@@ -216,23 +273,23 @@ function App() {
   useEffect(() => {
     if (!selected) return;
     mutate((list) => list.map((item) => item.id === selected.id
-      ? { ...item, history: emitLocaleEvent(item.history, 'phase_viewed', { phaseKey: item.activePhaseKey, ...localePayload(locale) }) }
+      ? { ...item, history: emitLocaleEvent(item.history, 'phase_viewed', { phaseKey: item.activePhaseKey, ...localePayload(locale) }, appendAnalyticsEventSafe) }
       : item));
-  }, [locale, selected?.id, selected?.activePhaseKey]);
+  }, [appendAnalyticsEventSafe, locale, selected?.id, selected?.activePhaseKey]);
 
   useEffect(() => {
     if (!selectedAlert) return;
     mutate((list) => list.map((item) => item.id === selected?.id
-      ? { ...item, history: emitLocaleEvent(item.history, 'alert_viewed', { alertId: selectedAlert.id, phaseKey: selectedAlert.phaseKey, ...localePayload(locale) }) }
+      ? { ...item, history: emitLocaleEvent(item.history, 'alert_viewed', { alertId: selectedAlert.id, phaseKey: selectedAlert.phaseKey, ...localePayload(locale) }, appendAnalyticsEventSafe) }
       : item));
-  }, [locale, selected?.id, selectedAlert?.id]);
+  }, [appendAnalyticsEventSafe, locale, selected?.id, selectedAlert?.id]);
 
   useEffect(() => {
     if (!sheetOpen || !selected) return;
     mutate((list) => list.map((item) => item.id === selected.id
-      ? { ...item, history: emitLocaleEvent(item.history, 'memo_opened', { target: memoTarget, ...localePayload(locale) }) }
+      ? { ...item, history: emitLocaleEvent(item.history, 'memo_opened', { target: memoTarget, ...localePayload(locale) }, appendAnalyticsEventSafe) }
       : item));
-  }, [locale, memoTarget, selected?.id, sheetOpen]);
+  }, [appendAnalyticsEventSafe, locale, memoTarget, selected?.id, sheetOpen]);
 
   const renderDealCard = (item: CaseItem) => {
     const next = activeAlert(item);
@@ -343,7 +400,8 @@ function App() {
             <small>{copy[locale].brand_subtitle}</small>
           </div>
           <div className="top-actions">
-            <div className="pill"><span className="dot" /> {copy[locale].local_status}</div>
+            <div className={`pill ${repositoryStatus.remoteReady ? 'remote' : 'local'}`} title={repositoryStatus.label}><span className="dot" /> {repositoryStatus.remoteReady ? copy[locale].remote_status : copy[locale].local_status}</div>
+            <button className="outline-btn auth-btn" disabled={!repositoryStatus.remoteReady || tossLoginState === 'loading'} onClick={connectTossLogin}>{tossLoginState === 'connected' ? copy[locale].toss_login_connected_short : copy[locale].toss_login}</button>
             <button className="outline-btn" onClick={() => setLocale((prev) => (prev === 'ko' ? 'en' : 'ko'))}>{copy[locale].locale_toggle}</button>
           </div>
         </div>
@@ -355,6 +413,7 @@ function App() {
             <div className="eyebrow">{copy[locale].page_eyebrow}</div>
             <h1>{copy[locale].page_title}</h1>
             <p>{copy[locale].page_subtitle}</p>
+            {syncMessage ? <div className={`sync-message ${tossLoginState === 'error' ? 'error' : ''}`} role="status">{syncMessage}</div> : null}
           </div>
           <section className="summary" aria-label={copy[locale].stats_aria_label}>
             <div className="summary-card"><span>{copy[locale].summary_active}</span><strong>{stats.active}</strong></div>
