@@ -76,17 +76,17 @@ export const TEMPLATE: Template = {
   alertsByPhase: {
     pre_contract: [
       { id: 'pre_docs', titleKey: 'alert.pre_docs', detailKey: 'alert.pre_docs.detail', status: 'pending' },
-      { id: 'pre_owner', titleKey: 'alert.pre_owner', status: 'pending' },
-      { id: 'pre_walkthrough', titleKey: 'alert.pre_walkthrough', status: 'pending' },
+      { id: 'pre_owner', titleKey: 'alert.pre_owner', detailKey: 'alert.pre_owner.detail', status: 'pending' },
+      { id: 'pre_walkthrough', titleKey: 'alert.pre_walkthrough', detailKey: 'alert.pre_walkthrough.detail', status: 'pending' },
     ],
     contract_day: [
       { id: 'contract_confirm', titleKey: 'alert.contract_confirm', detailKey: 'alert.contract_confirm.detail', status: 'pending' },
-      { id: 'contract_copy', titleKey: 'alert.contract_copy', status: 'pending' },
-      { id: 'contract_signature', titleKey: 'alert.contract_signature', status: 'pending' },
+      { id: 'contract_copy', titleKey: 'alert.contract_copy', detailKey: 'alert.contract_copy.detail', status: 'pending' },
+      { id: 'contract_signature', titleKey: 'alert.contract_signature', detailKey: 'alert.contract_signature.detail', status: 'pending' },
     ],
     deposit_prep: [
       { id: 'deposit_transfer', titleKey: 'alert.deposit_transfer', detailKey: 'alert.deposit_transfer.detail', status: 'pending' },
-      { id: 'deposit_receipt', titleKey: 'alert.deposit_receipt', status: 'pending' },
+      { id: 'deposit_receipt', titleKey: 'alert.deposit_receipt', detailKey: 'alert.deposit_receipt.detail', status: 'pending' },
       { id: 'deposit_schedule', titleKey: 'alert.deposit_schedule', detailKey: 'alert.deposit_schedule.detail', status: 'pending' },
     ],
     deposit_day_reference: [
@@ -96,8 +96,8 @@ export const TEMPLATE: Template = {
       { id: 'deposit_ref_after', titleKey: 'alert.deposit_ref_after', detailKey: 'alert.deposit_ref_after.detail', status: 'reference' },
     ],
     post_contract: [
-      { id: 'post_archive', titleKey: 'alert.post_archive', status: 'pending' },
-      { id: 'post_followup', titleKey: 'alert.post_followup', status: 'pending' },
+      { id: 'post_archive', titleKey: 'alert.post_archive', detailKey: 'alert.post_archive.detail', status: 'pending' },
+      { id: 'post_followup', titleKey: 'alert.post_followup', detailKey: 'alert.post_followup.detail', status: 'pending' },
       { id: 'post_utility', titleKey: 'alert.post_utility', detailKey: 'alert.post_utility.detail', status: 'pending' },
     ],
   },

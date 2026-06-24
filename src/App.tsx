@@ -49,7 +49,7 @@ function App() {
   const backend = useMemo(() => createDefaultBackend(), []);
   const repository = backend.repository;
   const authAdapter = backend.authAdapter;
-  const [locale, setLocale] = useState<Locale>('ko');
+  const locale: Locale = 'ko';
   const [cases, setCases] = useState<CaseItem[]>([]);
   const [repositoryStatus, setRepositoryStatus] = useState(() => repository.getStatus());
   const [syncMessage, setSyncMessage] = useState(() => repository.getStatus().message ?? '');
@@ -311,11 +311,12 @@ function App() {
 
   const renderAlertRow = (alert: AlertItem) => {
     if (!selected) return null;
-    const expanded = expandedDetails[alert.id] ?? (alert.status === 'reference' || alert.status === 'done');
+    const alertTitle = t(locale, alert.titleKey);
+    const expanded = expandedDetails[alert.id] ?? alert.status === 'reference';
     const memoCount = alertMemoCount(selected, alert.id);
     const actionableMemoLabel = memoCount > 0
-      ? `${t(locale, alert.titleKey)} ${copy[locale].memo} ${memoCount}${copy[locale].memo_count_unit}`
-      : `${t(locale, alert.titleKey)} ${copy[locale].memo_add_row}`;
+      ? `${alertTitle} ${copy[locale].memo} ${memoCount}${copy[locale].memo_count_unit}`
+      : `${alertTitle} ${copy[locale].memo_add_row}`;
     return (
       <div key={alert.id} className={`check-row ${alert.status} ${alert.status === 'done' ? 'completed' : ''}`}>
         {alert.status === 'reference' ? (
@@ -323,18 +324,24 @@ function App() {
         ) : (
           <button
             className={`check ${alert.status === 'done' ? 'done' : ''}`}
-            aria-label={`${t(locale, alert.titleKey)} - ${alert.status === 'done' ? copy[locale].uncomplete_action : copy[locale].complete_action}`}
+            aria-label={`${alertTitle} - ${alert.status === 'done' ? copy[locale].uncomplete_action : copy[locale].complete_action}`}
             onClick={() => (alert.status === 'done' ? uncompleteAlert(selected.id, alert.id) : completeAlert(selected.id, alert.id))}
           >
             {alert.status === 'done' ? '✓' : '○'}
           </button>
         )}
         <div className="check-copy">
-          <h4>{t(locale, alert.titleKey)}</h4>
+          <h4>{alertTitle}</h4>
           {alert.detailKey ? (
             <>
-              <p>{expanded ? t(locale, alert.detailKey) : copy[locale].detail_more}</p>
-              <button type="button" className="text-link detail-toggle" onClick={() => setExpandedDetails((prev) => ({ ...prev, [alert.id]: !expanded }))} aria-expanded={expanded}>
+              {expanded ? <p>{t(locale, alert.detailKey)}</p> : null}
+              <button
+                type="button"
+                className="text-link detail-toggle"
+                onClick={() => setExpandedDetails((prev) => ({ ...prev, [alert.id]: !expanded }))}
+                aria-expanded={expanded}
+                aria-label={`${alertTitle} ${expanded ? copy[locale].detail_less : copy[locale].detail_more}`}
+              >
                 {expanded ? copy[locale].detail_less : copy[locale].detail_more}
               </button>
             </>
@@ -356,7 +363,7 @@ function App() {
             </button>
           ) : null}
           {alert.status === 'reference' ? (
-            <button type="button" className="soft-btn" aria-label={`${t(locale, alert.titleKey)} ${copy[locale].reference_view_label}`} onClick={() => openReference(alert)}>
+            <button type="button" className="soft-btn" aria-label={`${alertTitle} ${copy[locale].reference_view_label}`} onClick={() => openReference(alert)}>
               {copy[locale].reference_view_label}
             </button>
           ) : <span className={`row-tag ${alert.status === 'pending' ? 'warn' : ''}`}>{alert.status === 'done' ? copy[locale].completed : copy[locale].focus_caption}</span>}
@@ -381,7 +388,7 @@ function App() {
   const displayPhaseMeta = displayMode === 'all'
     ? formatProgress(locale, doneActionableCount(displayAlerts), actionableAlerts(displayAlerts).length || actionableAlerts(selected?.alerts ?? []).length)
     : displayMode === referencePhaseKey
-      ? (locale === 'ko' ? `참고 ${displayReferenceAlerts.length}개` : `${displayReferenceAlerts.length} references`)
+      ? `참고 ${displayReferenceAlerts.length}개`
       : formatProgress(locale, displayActionableAlerts.filter((alert) => alert.status === 'done').length, displayActionableAlerts.length || actionableAlerts(selected?.alerts ?? []).length);
   const focusAlert = displayMode === referencePhaseKey ? null : selectedAlert;
   const referenceAlerts = selected?.alerts.filter((alert) => alert.status === 'reference') ?? [];
@@ -402,7 +409,6 @@ function App() {
           <div className="top-actions">
             <div className={`pill ${repositoryStatus.remoteReady ? 'remote' : 'local'}`} title={repositoryStatus.label}><span className="dot" /> {repositoryStatus.remoteReady ? copy[locale].remote_status : copy[locale].local_status}</div>
             <button className="outline-btn auth-btn" disabled={!repositoryStatus.remoteReady || tossLoginState === 'loading'} onClick={connectTossLogin}>{tossLoginState === 'connected' ? copy[locale].toss_login_connected_short : copy[locale].toss_login}</button>
-            <button className="outline-btn" onClick={() => setLocale((prev) => (prev === 'ko' ? 'en' : 'ko'))}>{copy[locale].locale_toggle}</button>
           </div>
         </div>
       </header>
@@ -424,9 +430,12 @@ function App() {
 
         <div className="app-grid">
           <aside className="sidebar">
+            <div className="create-card create-card-top">
+              <input aria-label={copy[locale].deal_title} value={draftTitle} onChange={(e) => setDraftTitle(e.target.value)} placeholder={copy[locale].deal_placeholder} />
+              <button className="primary-btn" onClick={() => createCase(false)}>{copy[locale].start_new}</button>
+            </div>
             <div className="side-head">
               <h2>{copy[locale].deal_list}</h2>
-              <button className="round-add" aria-label={copy[locale].start_new} onClick={() => createCase(false)}>+</button>
             </div>
             <div className="search">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true"><circle cx="11" cy="11" r="7" /><path d="m20 20-4-4" /></svg>
@@ -436,10 +445,6 @@ function App() {
               <button className={`filter ${filter === 'active' ? 'active' : ''}`} onClick={() => setFilter('active')}>{copy[locale].filter_active} {stats.active}</button>
               <button className={`filter ${filter === 'completed' ? 'active' : ''}`} onClick={() => setFilter('completed')}>{copy[locale].filter_completed} {stats.completed}</button>
               <button className={`filter ${filter === 'all' ? 'active' : ''}`} onClick={() => setFilter('all')}>{copy[locale].filter_all}</button>
-            </div>
-            <div className="create-card">
-              <input aria-label={copy[locale].deal_title} value={draftTitle} onChange={(e) => setDraftTitle(e.target.value)} placeholder={copy[locale].deal_placeholder} />
-              <button className="primary-btn" onClick={() => createCase(false)}>{copy[locale].start_new}</button>
             </div>
             {filteredCases.length === 0 ? (
               <div className="empty-state">
@@ -489,7 +494,7 @@ function App() {
                       >
                         <div className="step-node">{isDone ? '✓' : isReference ? '↗' : TEMPLATE.phaseOrder.indexOf(phaseKey) + 1}</div>
                         <strong>{t(locale, `phase.${phaseKey}`)}</strong>
-                        <span>{isReference ? (locale === 'ko' ? '자료 4개' : '4 refs') : `${done}/${actionable.length} ${copy[locale].progress_complete}`}</span>
+                        <span>{isReference ? '자료 4개' : `${done}/${actionable.length} ${copy[locale].progress_complete}`}</span>
                       </button>
                     );
                   })}
@@ -502,7 +507,7 @@ function App() {
                   <div className="focus-copy">
                     <div className="caption">{selected.completed ? copy[locale].completed_state : `${copy[locale].focus_caption} · ${formatRemaining(locale, pendingActionable(selected.alerts).length)}`}</div>
                     <h3>{selected.completed ? copy[locale].completion_message : focusAlert ? t(locale, focusAlert.titleKey) : copy[locale].reference_optional_notice}</h3>
-                    <p>{selected.completed ? copy[locale].completion_notice : focusAlert ? (focusAlert.detailKey ? t(locale, focusAlert.detailKey) : copy[locale].actionable_notice) : copy[locale].reference_notice}</p>
+                    <p>{selected.completed ? copy[locale].completion_notice : focusAlert ? copy[locale].actionable_notice : copy[locale].reference_notice}</p>
                   </div>
                   <div className="focus-actions">
                     {focusAlert ? (

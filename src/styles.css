@@ -3,7 +3,7 @@
   --surface: #ffffff;
   --surface-muted: #fbfcfc;
   --text: #17212b;
-  --text-muted: #66727f;
+  --text-muted: #4a5568;
   --brand: #173f4f;
   --brand-strong: #102d39;
   --success: #1b7059;
@@ -454,15 +454,6 @@ textarea {
   letter-spacing: 0;
 }
 
-.round-add {
-  display: inline-grid;
-  place-items: center;
-  width: var(--touch-target);
-  padding: 0;
-  border-radius: 14px;
-  font-size: 1.1rem;
-}
-
 .search {
   position: relative;
   margin-top: 14px;
@@ -498,6 +489,15 @@ textarea {
   border: 1px solid var(--line);
   border-radius: 18px;
   background: var(--surface-muted);
+}
+
+.create-card-top {
+  margin-top: 0;
+  margin-bottom: 18px;
+}
+
+.create-card-top + .side-head {
+  padding-top: 2px;
 }
 
 .primary-btn {
@@ -567,7 +567,6 @@ textarea {
 }
 
 .actions button,
-.round-add,
 .primary-btn {
   flex-shrink: 0;
 }

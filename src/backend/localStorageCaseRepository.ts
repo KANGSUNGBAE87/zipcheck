@@ -6,9 +6,9 @@ export class LocalStorageCaseRepository implements CaseRepository {
   getStatus(): RepositoryStatus {
     return {
       mode: 'local',
-      label: 'localStorage fallback',
+      label: '기기 저장',
       remoteReady: false,
-      message: 'Supabase 환경값이 없거나 원격 저장을 사용할 수 없어 이 기기에 임시 저장합니다.',
+      message: '현재 기기에 임시 저장합니다. 로그인하지 않아도 체크리스트를 사용할 수 있습니다.',
     };
   }
 

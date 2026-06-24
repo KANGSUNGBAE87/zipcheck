@@ -32,6 +32,34 @@ describe('App broker checklist MVP', () => {
     expect(screen.queryByText(/진행 중 거래 ·/)).not.toBeInTheDocument();
   });
 
+  it('keeps the new deal form above the deal list, removes plus-only create, and hides English UI', () => {
+    render(<App />);
+
+    const titleInput = screen.getByRole('textbox', { name: '거래명' });
+    const dealListHeading = screen.getByText('거래 목록');
+    const searchInput = screen.getByRole('textbox', { name: '거래명 검색' });
+
+    expect(titleInput.compareDocumentPosition(dealListHeading) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(dealListHeading.compareDocumentPosition(searchInput) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(screen.getAllByRole('button').filter((button) => button.textContent?.trim() === '+')).toHaveLength(0);
+    expect(screen.queryByRole('button', { name: 'EN' })).not.toBeInTheDocument();
+    expect(screen.queryByText('MY TRANSACTIONS')).not.toBeInTheDocument();
+  });
+
+  it('shows item guide controls with practical guidance instead of generic detail wording', () => {
+    render(<App />);
+
+    fireEvent.change(screen.getByRole('textbox', { name: '거래명' }), { target: { value: '가이드 검증' } });
+    clickButtonByText('새 거래 시작');
+
+    expect(screen.queryByText('상세 보기')).not.toBeInTheDocument();
+    expect(screen.queryByText('상세 펼치기')).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: '소유자 정보 확인 가이드 보기' }));
+
+    expect(screen.getAllByText(/인터넷등기소/).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/정부24/).length).toBeGreaterThan(0);
+  });
+
   it('uses actionable 12-item progress and separates reference-only items from the next action', () => {
     render(<App />);
 
@@ -58,21 +86,20 @@ describe('App broker checklist MVP', () => {
     expect(screen.queryByText(/alert_viewed/)).not.toBeInTheDocument();
   });
 
-  it('creates a local-first case with ko/en session_start and keeps analytics PII-free', () => {
+  it('creates a Korean case and keeps analytics PII-free', () => {
     render(<App />);
 
-    fireEvent.click(screen.getByRole('button', { name: 'EN' }));
-    fireEvent.change(screen.getByRole('textbox', { name: 'Deal title' }), { target: { value: 'First English deal' } });
-    clickButtonByText('Start new deal');
+    fireEvent.change(screen.getByRole('textbox', { name: '거래명' }), { target: { value: '첫 거래' } });
+    clickButtonByText('새 거래 시작');
 
     const stored = JSON.parse(localStorage.getItem('non-game-market-insights:v2') ?? '[]');
     expect(stored).toHaveLength(1);
-    expect(stored[0].history.some((event: { type: string; payload?: { firstEntry?: boolean; locale?: string } }) => event.type === 'session_start' && event.payload?.firstEntry && event.payload?.locale === 'en')).toBe(true);
-    expect(screen.getAllByText(/Next item/).length).toBeGreaterThan(0);
-    expect(screen.getAllByText('Before Toss login, deal titles and memos stay on this device. After connection, they sync to Supabase.')[0]).toBeInTheDocument();
+    expect(stored[0].history.some((event: { type: string; payload?: { firstEntry?: boolean; locale?: string } }) => event.type === 'session_start' && event.payload?.firstEntry && event.payload?.locale === 'ko')).toBe(true);
+    expect(screen.getAllByText(/지금 확인할 항목/).length).toBeGreaterThan(0);
+    expect(screen.getAllByText('로그인하지 않아도 저장됩니다. 토스 로그인 연결 시 계정에 이어서 보관합니다.')[0]).toBeInTheDocument();
     expect(screen.queryByText('Back')).not.toBeInTheDocument();
     const analytics = JSON.parse(localStorage.getItem('non-game-market-insights:events:v1') ?? '[]');
-    expect(analytics.some((event: { type: string; payload?: { locale?: string; phaseKey?: string } }) => event.type === 'phase_viewed' && event.payload?.phaseKey === 'pre_contract' && event.payload?.locale === 'en')).toBe(true);
+    expect(analytics.some((event: { type: string; payload?: { locale?: string; phaseKey?: string } }) => event.type === 'phase_viewed' && event.payload?.phaseKey === 'pre_contract' && event.payload?.locale === 'ko')).toBe(true);
   });
 
   it('recomputes active phase from the earliest remaining pending alert and keeps reference phases intact', () => {
@@ -113,11 +140,11 @@ describe('App broker checklist MVP', () => {
 
     expect(screen.getAllByText('0 / 12 완료')[0]).toBeInTheDocument();
     expect(screen.getAllByText('잔금일 참고').length).toBeGreaterThan(0);
-    expect(screen.getAllByText('토스 로그인 연결 전에는 이 기기에 임시 저장되고, 연결 후에는 Supabase에 저장됩니다.')[0]).toBeInTheDocument();
+    expect(screen.getAllByText('로그인하지 않아도 저장됩니다. 토스 로그인 연결 시 계정에 이어서 보관합니다.')[0]).toBeInTheDocument();
     expect(screen.getByText('완료에 포함되지 않는 참고자료 4개')).toBeInTheDocument();
     expect(screen.getAllByRole('button').some((button) => button.textContent === '○')).toBe(true);
     expect(screen.getByText('완료에 포함되지 않는 참고자료 4개')).toBeInTheDocument();
-    expect(screen.getAllByText('토스 로그인 연결 전에는 이 기기에 임시 저장되고, 연결 후에는 Supabase에 저장됩니다.')[0]).toBeInTheDocument();
+    expect(screen.getAllByText('로그인하지 않아도 저장됩니다. 토스 로그인 연결 시 계정에 이어서 보관합니다.')[0]).toBeInTheDocument();
     expect(screen.getAllByText('계약 전').length).toBeGreaterThan(0);
 
     // Verify accessibility label for reference-only button
@@ -134,7 +161,7 @@ describe('App broker checklist MVP', () => {
 
     fireEvent.change(screen.getByRole('textbox', { name: '거래명' }), { target: { value: '샘플 거래' } });
     clickButtonByText('새 거래 시작');
-    fireEvent.click(screen.getByRole('button', { name: '+ 메모 추가' }));
+    fireEvent.click(screen.getByRole('button', { name: '메모 추가' }));
     expect(screen.getAllByRole('button', { name: '닫기' })[0]).toBeInTheDocument();
     const memoOpened = JSON.parse(localStorage.getItem('non-game-market-insights:events:v1') ?? '[]');
     expect(memoOpened.some((event: { type: string; payload?: { locale?: string } }) => event.type === 'memo_opened' && event.payload?.locale === 'ko')).toBe(true);
@@ -158,7 +185,7 @@ describe('App broker checklist MVP', () => {
 
     fireEvent.change(screen.getByRole('textbox', { name: '거래명' }), { target: { value: '메모 인디케이터 검증' } });
     clickButtonByText('새 거래 시작');
-    fireEvent.click(screen.getByRole('button', { name: '+ 메모 추가' }));
+    fireEvent.click(screen.getByRole('button', { name: '메모 추가' }));
     fireEvent.change(screen.getByRole('combobox'), { target: { value: 'pre_docs' } });
     fireEvent.change(screen.getByRole('textbox', { name: '메모' }), { target: { value: '등기부 확인 위치' } });
     fireEvent.click(screen.getByRole('button', { name: '메모 저장' }));
@@ -186,15 +213,15 @@ describe('App broker checklist MVP', () => {
   it('supports undo-safe completion and the trust notice', () => {
     render(<App />);
 
-    fireEvent.change(screen.getByRole('textbox', { name: '거래명' }), { target: { value: 'undo 검증' } });
+    fireEvent.change(screen.getByRole('textbox', { name: '거래명' }), { target: { value: '되돌리기 검증' } });
     clickButtonByText('새 거래 시작');
 
-    expect(screen.getAllByText('토스 로그인 연결 전에는 이 기기에 임시 저장되고, 연결 후에는 Supabase에 저장됩니다.')[0]).toBeInTheDocument();
+    expect(screen.getAllByText('로그인하지 않아도 저장됩니다. 토스 로그인 연결 시 계정에 이어서 보관합니다.')[0]).toBeInTheDocument();
 
     fireEvent.click(screen.getAllByRole('button', { name: /완료하기/ })[0]);
     expect(screen.getByText('완료 직후에는 바로 되돌릴 수 있습니다.')).toBeInTheDocument();
-    expect(screen.getAllByText('상세 접기').length).toBeGreaterThan(0);
-    fireEvent.click(screen.getByRole('button', { name: '즉시 undo' }));
+    expect(screen.getAllByText('가이드 보기').length).toBeGreaterThan(0);
+    fireEvent.click(screen.getByRole('button', { name: '즉시 되돌리기' }));
 
     const stored = getCase();
     expect(stored.alerts.find((alert: { id: string; status: string }) => alert.id === 'pre_docs')?.status).toBe('pending');
@@ -239,7 +266,7 @@ describe('App broker checklist MVP', () => {
     expect(screen.getByText('잔금일 참고')).toBeInTheDocument();
     expect(screen.getAllByRole('button', { name: /참고 보기/ })).toHaveLength(4);
     expect(screen.queryByRole('button', { name: /완료하기/ })).not.toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: '상세 보기' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '가이드 보기' })).not.toBeInTheDocument();
   });
 
   it('toggles the full checklist so completed, future, and reference rows stay reachable', () => {
@@ -286,10 +313,10 @@ describe('App broker checklist MVP', () => {
     expect(screen.getByText('메모 1')).toBeInTheDocument();
   });
 
-  it('uses an actionable fallback for checklist items without detail copy', () => {
+  it('shows practical guide copy for post-contract checklist items', () => {
     render(<App />);
 
-    fireEvent.change(screen.getByRole('textbox', { name: '거래명' }), { target: { value: '상세 없는 항목 검증' } });
+    fireEvent.change(screen.getByRole('textbox', { name: '거래명' }), { target: { value: '사후 가이드 검증' } });
     clickButtonByText('새 거래 시작');
 
     for (let i = 0; i < 9; i += 1) {
@@ -297,7 +324,8 @@ describe('App broker checklist MVP', () => {
     }
 
     expect(screen.getAllByText('문서 보관').length).toBeGreaterThan(0);
-    expect(screen.getByText('이 항목을 확인한 뒤 완료 처리하세요. 필요하면 항목별 메모를 남길 수 있습니다.')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: '문서 보관 가이드 보기' }));
+    expect(screen.getByText(/거래별 폴더에 보관합니다/)).toBeInTheDocument();
     expect(screen.queryByText('4단계는 참고 전용입니다. 완료 체크가 없습니다.')).not.toBeInTheDocument();
   });
 

@@ -77,7 +77,7 @@ export class SupabaseCaseRepository implements CaseRepository {
       mode: 'supabase',
       label: 'Supabase',
       remoteReady: true,
-      message: '토스 로그인 연결 후 Supabase에 저장합니다.',
+      message: '로그인하지 않아도 저장됩니다. 토스 로그인 연결 시 계정에 이어서 보관합니다.',
     };
   }
 
