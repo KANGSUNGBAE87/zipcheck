@@ -57,6 +57,7 @@ function App() {
   const [searchTerm, setSearchTerm] = useState('');
   const [filter, setFilter] = useState<'active' | 'completed' | 'all'>('active');
   const [mobileTab, setMobileTab] = useState<'deals' | 'checklist' | 'memo'>('checklist');
+  const [viewPhaseKey, setViewPhaseKey] = useState<PhaseKey | 'all' | null>(null);
 
   useEffect(() => {
     const handleResize = () => {
@@ -87,6 +88,11 @@ function App() {
     const timer = window.setTimeout(() => setUndoTarget(null), 5000);
     return () => window.clearTimeout(timer);
   }, [undoTarget]);
+  useEffect(() => {
+    if (mobileTab === 'memo') return;
+    setSheetOpen(false);
+    setMemoTarget('case');
+  }, [mobileTab]);
 
   const selected = cases.find((item) => item.id === selectedId) ?? null;
   const selectedAlert = selected ? activeAlert(selected) : null;
@@ -114,6 +120,7 @@ function App() {
 
   const openCase = (caseId: string, source: 'case_list' | 'history_anchor' = 'case_list') => {
     setSelectedId(caseId);
+    setViewPhaseKey(null);
     setMobileTab('checklist');
     mutate((list) => list.map((item) => item.id === caseId
       ? { ...item, lastOpenedAt: new Date().toISOString(), history: [...item.history, createEvent('case_opened', { caseId, payload: { source, ...localePayload(locale) } })] }
@@ -129,6 +136,7 @@ function App() {
     const activePhaseKey = recomputeActivePhaseKey(prepared.alerts);
     mutate((list) => [{ ...prepared, activePhaseKey, completed: pendingActionable(prepared.alerts).length === 0 }, ...list]);
     setSelectedId(prepared.id);
+    setViewPhaseKey(null);
     setDraftTitle('');
     setMemoTarget('case');
     setSheetOpen(false);
@@ -161,6 +169,17 @@ function App() {
       return { ...item, alerts, activePhaseKey, completed, history };
     }));
     setUndoTarget(null);
+  };
+
+  const uncompleteAlert = (caseId: string, alertId: string) => {
+    mutate((list) => list.map((item) => {
+      if (item.id !== caseId) return item;
+      const alerts = item.alerts.map((alert) => alert.id === alertId ? { ...alert, status: 'pending' as const, doneAt: undefined } : alert);
+      const activePhaseKey = recomputeActivePhaseKey(alerts);
+      const completed = pendingActionable(alerts).length === 0;
+      const history = [...item.history, createEvent('alert_undone', { caseId, alertId, payload: { alertId, ...localePayload(locale) } })];
+      return { ...item, alerts, activePhaseKey, completed, lastCompletedAt: completed ? item.lastCompletedAt : undefined, history };
+    }));
   };
 
   const saveMemo = () => {
@@ -237,6 +256,9 @@ function App() {
     if (!selected) return null;
     const expanded = expandedDetails[alert.id] ?? (alert.status === 'reference' || alert.status === 'done');
     const memoCount = alertMemoCount(selected, alert.id);
+    const actionableMemoLabel = memoCount > 0
+      ? `${t(locale, alert.titleKey)} ${copy[locale].memo} ${memoCount}${copy[locale].memo_count_unit}`
+      : `${t(locale, alert.titleKey)} ${copy[locale].memo_add_row}`;
     return (
       <div key={alert.id} className={`check-row ${alert.status} ${alert.status === 'done' ? 'completed' : ''}`}>
         {alert.status === 'reference' ? (
@@ -244,9 +266,8 @@ function App() {
         ) : (
           <button
             className={`check ${alert.status === 'done' ? 'done' : ''}`}
-            aria-label={`${t(locale, alert.titleKey)} - ${alert.status === 'done' ? copy[locale].completed : copy[locale].complete_action}`}
-            disabled={alert.status === 'done'}
-            onClick={() => completeAlert(selected.id, alert.id)}
+            aria-label={`${t(locale, alert.titleKey)} - ${alert.status === 'done' ? copy[locale].uncomplete_action : copy[locale].complete_action}`}
+            onClick={() => (alert.status === 'done' ? uncompleteAlert(selected.id, alert.id) : completeAlert(selected.id, alert.id))}
           >
             {alert.status === 'done' ? '✓' : '○'}
           </button>
@@ -263,13 +284,18 @@ function App() {
           ) : <p>{alert.status === 'done' ? copy[locale].completed : t(locale, `phase.${alert.phaseKey}`)}</p>}
         </div>
         <div className="row-actions">
-          {memoCount > 0 ? (
-            <button type="button" className="memo-indicator" aria-label={`${copy[locale].memo_exists} ${memoCount}${copy[locale].memo_count_unit}`} onClick={() => {
-              setMemoTarget(alert.id);
-              setSheetOpen(true);
-              setMobileTab('memo');
-            }}>
-              {`${copy[locale].memo} ${memoCount}`}
+          {alert.status !== 'reference' ? (
+            <button
+              type="button"
+              className={`memo-indicator ${memoCount > 0 ? 'has-count' : 'is-empty'}`}
+              aria-label={actionableMemoLabel}
+              onClick={() => {
+                setMemoTarget(alert.id);
+                setSheetOpen(true);
+                setMobileTab('memo');
+              }}
+            >
+              {memoCount > 0 ? `${copy[locale].memo} ${memoCount}` : copy[locale].memo_add_row}
             </button>
           ) : null}
           {alert.status === 'reference' ? (
@@ -282,9 +308,28 @@ function App() {
     );
   };
 
-  const currentPhaseAlerts = selected?.alerts.filter((alert) => alert.phaseKey === selected.activePhaseKey && alert.status !== 'reference') ?? [];
+  const displayMode = viewPhaseKey ?? selected?.activePhaseKey ?? null;
+  const displayAlerts = selected ? (
+    displayMode === 'all'
+      ? selected.alerts
+      : selected.alerts.filter((alert) => alert.phaseKey === displayMode && (displayMode === referencePhaseKey || alert.status !== 'reference'))
+  ) : [];
+  const displayActionableAlerts = displayAlerts.filter((alert) => alert.status !== 'reference');
+  const displayReferenceAlerts = displayAlerts.filter((alert) => alert.status === 'reference');
+  const displayPhaseTitle = displayMode === 'all'
+    ? copy[locale].all_checklist
+    : displayMode
+      ? `${t(locale, `phase.${displayMode}`)} ${copy[locale].checklist_suffix}`
+      : copy[locale].current_checklist;
+  const displayPhaseMeta = displayMode === 'all'
+    ? formatProgress(locale, doneActionableCount(displayAlerts), actionableAlerts(displayAlerts).length || actionableAlerts(selected?.alerts ?? []).length)
+    : displayMode === referencePhaseKey
+      ? (locale === 'ko' ? `참고 ${displayReferenceAlerts.length}개` : `${displayReferenceAlerts.length} references`)
+      : formatProgress(locale, displayActionableAlerts.filter((alert) => alert.status === 'done').length, displayActionableAlerts.length || actionableAlerts(selected?.alerts ?? []).length);
+  const focusAlert = displayMode === referencePhaseKey ? null : selectedAlert;
   const referenceAlerts = selected?.alerts.filter((alert) => alert.status === 'reference') ?? [];
   const latestMemo = selected?.memos[selected.memos.length - 1] ?? null;
+  const showReferenceLibrary = displayMode !== 'all' && displayMode !== referencePhaseKey;
 
   return (
     <div className={`app-shell mobile-tab-${mobileTab}`}>
@@ -300,7 +345,6 @@ function App() {
           <div className="top-actions">
             <div className="pill"><span className="dot" /> {copy[locale].local_status}</div>
             <button className="outline-btn" onClick={() => setLocale((prev) => (prev === 'ko' ? 'en' : 'ko'))}>{copy[locale].locale_toggle}</button>
-            <button className="icon-btn" aria-label={copy[locale].settings}>•••</button>
           </div>
         </div>
       </header>
@@ -377,11 +421,17 @@ function App() {
                     const isReference = TEMPLATE.referencePhaseKeys.includes(phaseKey);
                     const isDone = !isReference && actionable.length > 0 && done === actionable.length;
                     return (
-                      <div key={phaseKey} className={`step ${isDone ? 'done' : ''} ${phaseKey === selected.activePhaseKey ? 'active' : ''} ${isReference ? 'reference' : ''}`}>
+                      <button
+                        key={phaseKey}
+                        type="button"
+                        className={`step ${isDone ? 'done' : ''} ${phaseKey === displayMode ? 'active' : ''} ${isReference ? 'reference' : ''}`}
+                        aria-pressed={phaseKey === displayMode}
+                        onClick={() => setViewPhaseKey(phaseKey)}
+                      >
                         <div className="step-node">{isDone ? '✓' : isReference ? '↗' : TEMPLATE.phaseOrder.indexOf(phaseKey) + 1}</div>
                         <strong>{t(locale, `phase.${phaseKey}`)}</strong>
                         <span>{isReference ? (locale === 'ko' ? '자료 4개' : '4 refs') : `${done}/${actionable.length} ${copy[locale].progress_complete}`}</span>
-                      </div>
+                      </button>
                     );
                   })}
                 </section>
@@ -392,12 +442,14 @@ function App() {
                   </div>
                   <div className="focus-copy">
                     <div className="caption">{selected.completed ? copy[locale].completed_state : `${copy[locale].focus_caption} · ${formatRemaining(locale, pendingActionable(selected.alerts).length)}`}</div>
-                    <h3>{selected.completed ? copy[locale].completion_message : selectedAlert ? t(locale, selectedAlert.titleKey) : copy[locale].reference_optional_notice}</h3>
-                    <p>{selected.completed ? copy[locale].completion_notice : selectedAlert?.detailKey ? t(locale, selectedAlert.detailKey) : copy[locale].reference_notice}</p>
+                    <h3>{selected.completed ? copy[locale].completion_message : focusAlert ? t(locale, focusAlert.titleKey) : copy[locale].reference_optional_notice}</h3>
+                    <p>{selected.completed ? copy[locale].completion_notice : focusAlert ? (focusAlert.detailKey ? t(locale, focusAlert.detailKey) : copy[locale].actionable_notice) : copy[locale].reference_notice}</p>
                   </div>
                   <div className="focus-actions">
-                    <button className="outline-btn" onClick={() => selectedAlert && setExpandedDetails((prev) => ({ ...prev, [selectedAlert.id]: true }))}>{copy[locale].detail_view}</button>
-                    {selectedAlert ? <button className="primary-btn" onClick={() => completeAlert(selected.id, selectedAlert.id)}>{copy[locale].complete_action}</button> : null}
+                    {focusAlert ? (
+                      <button className="outline-btn" onClick={() => setExpandedDetails((prev) => ({ ...prev, [focusAlert.id]: true }))}>{copy[locale].detail_view}</button>
+                    ) : null}
+                    {focusAlert ? <button className="primary-btn" onClick={() => completeAlert(selected.id, focusAlert.id)}>{copy[locale].complete_action}</button> : null}
                   </div>
                 </section>
 
@@ -411,11 +463,13 @@ function App() {
                 <div className="content-grid">
                   <section className="section-card checklist-card">
                     <div className="section-head">
-                      <h3>{copy[locale].current_checklist}</h3>
-                      <span>{formatProgress(locale, currentPhaseAlerts.filter((alert) => alert.status === 'done').length, currentPhaseAlerts.length || actionableAlerts(selected.alerts).length)}</span>
+                      <h3>{displayPhaseTitle}</h3>
+                      <span>{displayPhaseMeta}</span>
                     </div>
-                    {currentPhaseAlerts.length > 0 ? currentPhaseAlerts.map(renderAlertRow) : actionableAlerts(selected.alerts).map(renderAlertRow)}
-                    <button className="more-link">{copy[locale].all_checklist}</button>
+                    {displayAlerts.map(renderAlertRow)}
+                    <button type="button" className="more-link" aria-pressed={displayMode === 'all'} onClick={() => setViewPhaseKey((prev) => (prev === 'all' ? null : 'all'))}>
+                      {displayMode === 'all' ? copy[locale].current_checklist : copy[locale].all_checklist}
+                    </button>
                   </section>
 
                   <div className="side-stack">
@@ -430,15 +484,17 @@ function App() {
                       </div>
                       <div className="memo-box">{latestMemo ? latestMemo.text : copy[locale].empty_memo}</div>
                     </section>
-                    <section className="section-card reference-library">
-                      <div className="memo-title">
-                        <div>
-                          <h3>{copy[locale].reference_library}</h3>
-                          <p>{copy[locale].reference_library_note}</p>
+                    {showReferenceLibrary ? (
+                      <section className="section-card reference-library">
+                        <div className="memo-title">
+                          <div>
+                            <h3>{copy[locale].reference_library}</h3>
+                            <p>{copy[locale].reference_library_note}</p>
+                          </div>
                         </div>
-                      </div>
-                      {referenceAlerts.map(renderAlertRow)}
-                    </section>
+                        {referenceAlerts.map(renderAlertRow)}
+                      </section>
+                    ) : null}
                     <section className="section-card activity-card">
                       <div className="memo-title"><h3>{copy[locale].activity_timeline}</h3></div>
                       <ol className="activity-list">

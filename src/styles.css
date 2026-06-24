@@ -1027,13 +1027,17 @@ textarea {
 .phase-node,
 .step {
   display: flex;
+  appearance: none;
   flex-direction: column;
   gap: 6px;
   min-width: 0;
   min-height: 96px;
   padding: 12px 10px;
+  background: var(--surface);
+  color: var(--text);
   text-align: center;
   justify-content: center;
+  align-items: center;
 }
 
 .phase-node strong,
@@ -1055,6 +1059,14 @@ textarea {
   border-color: #95bdaf;
   background: linear-gradient(145deg, #f3faf6, #e7f4ee);
   color: var(--success);
+}
+
+.step:hover:not(:disabled) {
+  background: #fcfdfd;
+}
+
+.step.reference:hover:not(:disabled) {
+  background: #f3eadb;
 }
 
 .step-node {
@@ -1229,6 +1241,11 @@ textarea {
 
 .memo-indicator:hover:not(:disabled) {
   background: #fff0d6;
+}
+
+.memo-indicator.is-empty {
+  border-style: dashed;
+  background: #fffaf0;
 }
 
 .memo-indicator-label {

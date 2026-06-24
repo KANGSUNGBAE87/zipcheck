@@ -25,6 +25,7 @@ describe('App broker checklist MVP', () => {
     expect(screen.getByText('진행 중')).toBeInTheDocument();
     expect(screen.getByText('남은 확인')).toBeInTheDocument();
     expect(screen.getByText('완료')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '설정' })).not.toBeInTheDocument();
     expect(screen.getAllByRole('button', { name: '새 거래 시작' }).length).toBeGreaterThan(0);
     expect(screen.getAllByRole('button', { name: '샘플 거래로 둘러보기' }).length).toBeGreaterThan(0);
     expect(screen.queryByText(/진행 중 거래 ·/)).not.toBeInTheDocument();
@@ -50,6 +51,8 @@ describe('App broker checklist MVP', () => {
 
     expect(screen.getByText('활동 기록')).toBeInTheDocument();
     expect(screen.getByText(/거래를 만들었습니다/)).toBeInTheDocument();
+    expect(screen.getByText('세션을 시작했습니다')).toBeInTheDocument();
+    expect(screen.queryByText(/activity_session_start/)).not.toBeInTheDocument();
     expect(screen.queryByText(/phase_viewed/)).not.toBeInTheDocument();
     expect(screen.queryByText(/alert_viewed/)).not.toBeInTheDocument();
   });
@@ -159,7 +162,7 @@ describe('App broker checklist MVP', () => {
     fireEvent.change(screen.getByRole('textbox', { name: '메모' }), { target: { value: '등기부 확인 위치' } });
     fireEvent.click(screen.getByRole('button', { name: '메모 저장' }));
 
-    expect(screen.getByRole('button', { name: '메모 있음 1개' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '계약 전 서류 확인 메모 1개' })).toBeInTheDocument();
     expect(screen.getByText('메모 1')).toBeInTheDocument();
   });
 
@@ -217,5 +220,101 @@ describe('App broker checklist MVP', () => {
     expect(screen.getByText('완료 상태')).toBeInTheDocument();
     expect(screen.getByText('모든 실행 항목을 완료했습니다. 참고 자료는 필요할 때만 열어보세요.')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '등기/세금 참고자료 참고 보기' })).toBeInTheDocument();
+  });
+
+  it('lets brokers jump between phase buttons and inspect phase-specific checklist rows', () => {
+    render(<App />);
+
+    fireEvent.change(screen.getByRole('textbox', { name: '거래명' }), { target: { value: '단계 이동 검증' } });
+    clickButtonByText('새 거래 시작');
+
+    fireEvent.click(screen.getByRole('button', { name: /계약 후/ }));
+
+    expect(screen.getByText('계약 후 체크리스트')).toBeInTheDocument();
+    expect(screen.getAllByText('문서 보관').length).toBeGreaterThan(0);
+
+    fireEvent.click(screen.getByRole('button', { name: /잔금일 참고/ }));
+
+    expect(screen.getByText('잔금일 참고')).toBeInTheDocument();
+    expect(screen.getAllByRole('button', { name: /참고 보기/ })).toHaveLength(4);
+    expect(screen.queryByRole('button', { name: /완료하기/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '상세 보기' })).not.toBeInTheDocument();
+  });
+
+  it('toggles the full checklist so completed, future, and reference rows stay reachable', () => {
+    render(<App />);
+
+    fireEvent.change(screen.getByRole('textbox', { name: '거래명' }), { target: { value: '전체 체크리스트 검증' } });
+    clickButtonByText('새 거래 시작');
+
+    fireEvent.click(screen.getAllByRole('button', { name: /완료하기/ })[0]);
+    fireEvent.click(screen.getByRole('button', { name: '전체 체크리스트' }));
+
+    expect(screen.getByText('전체 체크리스트')).toBeInTheDocument();
+    expect(screen.getByText('계약 전 서류 확인')).toBeInTheDocument();
+    expect(screen.getAllByText('문서 보관').length).toBeGreaterThan(0);
+    expect(screen.getAllByRole('button', { name: /참고 보기/ })).toHaveLength(4);
+  });
+
+  it('allows completed checklist items to be unchecked after the toast window', () => {
+    render(<App />);
+
+    fireEvent.change(screen.getByRole('textbox', { name: '거래명' }), { target: { value: '완료 해제 검증' } });
+    clickButtonByText('새 거래 시작');
+
+    fireEvent.click(screen.getAllByRole('button', { name: /완료하기/ })[0]);
+    expect(getCase().alerts.find((alert: { id: string }) => alert.id === 'pre_docs').status).toBe('done');
+
+    fireEvent.click(screen.getByRole('button', { name: '계약 전 서류 확인 - 완료 해제' }));
+
+    expect(getCase().alerts.find((alert: { id: string }) => alert.id === 'pre_docs').status).toBe('pending');
+  });
+
+  it('shows memo entry controls on every actionable checklist row even before a memo exists', () => {
+    render(<App />);
+
+    fireEvent.change(screen.getByRole('textbox', { name: '거래명' }), { target: { value: '행별 메모 검증' } });
+    clickButtonByText('새 거래 시작');
+
+    fireEvent.click(screen.getByRole('button', { name: '소유자 정보 확인 메모 추가' }));
+
+    fireEvent.change(screen.getByRole('textbox', { name: '메모' }), { target: { value: '소유자 통화 예정' } });
+    fireEvent.click(screen.getByRole('button', { name: '메모 저장' }));
+
+    expect(screen.getByRole('button', { name: '소유자 정보 확인 메모 1개' })).toBeInTheDocument();
+    expect(screen.getByText('메모 1')).toBeInTheDocument();
+  });
+
+  it('uses an actionable fallback for checklist items without detail copy', () => {
+    render(<App />);
+
+    fireEvent.change(screen.getByRole('textbox', { name: '거래명' }), { target: { value: '상세 없는 항목 검증' } });
+    clickButtonByText('새 거래 시작');
+
+    for (let i = 0; i < 9; i += 1) {
+      fireEvent.click(screen.getAllByRole('button', { name: /완료하기/ })[0]);
+    }
+
+    expect(screen.getAllByText('문서 보관').length).toBeGreaterThan(0);
+    expect(screen.getByText('이 항목을 확인한 뒤 완료 처리하세요. 필요하면 항목별 메모를 남길 수 있습니다.')).toBeInTheDocument();
+    expect(screen.queryByText('4단계는 참고 전용입니다. 완료 체크가 없습니다.')).not.toBeInTheDocument();
+  });
+
+  it('closes an open memo or reference sheet when switching away from the memo tab', () => {
+    render(<App />);
+
+    fireEvent.change(screen.getByRole('textbox', { name: '거래명' }), { target: { value: '모바일 탭 검증' } });
+    clickButtonByText('새 거래 시작');
+
+    fireEvent.click(screen.getByRole('button', { name: '등기/세금 참고자료 참고 보기' }));
+    expect(screen.getByText('잔금일에 다시 볼 참고자료와 연락 지점을 먼저 확인하는 영역입니다.')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: '거래' }));
+
+    expect(screen.queryByText('잔금일에 다시 볼 참고자료와 연락 지점을 먼저 확인하는 영역입니다.')).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: '메모' }));
+
+    expect(screen.queryByText('잔금일에 다시 볼 참고자료와 연락 지점을 먼저 확인하는 영역입니다.')).not.toBeInTheDocument();
   });
 });
