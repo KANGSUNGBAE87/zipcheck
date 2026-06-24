@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { copy, t } from './i18n';
-import { TEMPLATE, type AlertItem, type CaseItem, type HistoryEvent, type Locale, type Memo, type PhaseKey } from './domain';
+import { TEMPLATE, type AlertItem, type CaseItem, type HistoryEvent, type Locale, type Memo, type PhaseKey, type PropertyType, type TransactionType } from './domain';
+import { PROPERTY_OPTIONS, TRANSACTION_OPTIONS, guideTierLabel, propertyLabel, resolveGuide, resolveGuideBranches, resolveGuideSources, transactionLabel } from './guides';
 import { createDefaultBackend } from './backend/defaultBackend';
 import { createBlankCase, createEvent, recomputeActivePhaseKey } from './storage';
 
@@ -62,7 +63,7 @@ function App() {
   const [sheetOpen, setSheetOpen] = useState(false);
   const [keyboardHeight, setKeyboardHeight] = useState(0);
   const [undoTarget, setUndoTarget] = useState<{ caseId: string; alertId: string } | null>(null);
-  const [expandedDetails, setExpandedDetails] = useState<Record<string, boolean>>({});
+  const [guideTargetId, setGuideTargetId] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [filter, setFilter] = useState<'active' | 'completed' | 'all'>('active');
   const [mobileTab, setMobileTab] = useState<'deals' | 'checklist' | 'memo'>('checklist');
@@ -122,6 +123,7 @@ function App() {
     if (mobileTab === 'memo') return;
     setSheetOpen(false);
     setMemoTarget('case');
+    setGuideTargetId(null);
   }, [mobileTab]);
 
   const selected = cases.find((item) => item.id === selectedId) ?? null;
@@ -130,6 +132,10 @@ function App() {
     ? selected.alerts.find((alert) => alert.id === memoTarget) ?? null
     : null;
   const referenceSheetOpen = selectedMemoAlert?.status === 'reference';
+  const selectedGuideAlert = selected && guideTargetId
+    ? selected.alerts.find((alert) => alert.id === guideTargetId) ?? null
+    : null;
+  const selectedGuide = selectedGuideAlert ? resolveGuide(selectedGuideAlert.id) : null;
 
   const stats = useMemo(() => ({
     active: cases.filter((item) => !item.completed).length,
@@ -258,16 +264,43 @@ function App() {
     }
   };
 
+  const updateCaseProfile = (caseId: string, patch: Partial<Pick<CaseItem, 'transactionType' | 'propertyType'>>) => {
+    mutate((list) => list.map((item) => item.id === caseId ? {
+      ...item,
+      ...patch,
+      history: [...item.history, createEvent('case_profile_updated', {
+        caseId,
+        payload: {
+          transactionType: patch.transactionType ?? item.transactionType,
+          propertyType: patch.propertyType ?? item.propertyType,
+          ...localePayload(locale),
+        },
+      })],
+    } : item));
+  };
+
+  const openGuide = (alert: AlertItem) => {
+    if (!selected) return;
+    setGuideTargetId(alert.id);
+    setSheetOpen(false);
+    mutate((list) => list.map((item) => {
+      if (item.id !== selected.id) return item;
+      const eventType = alert.status === 'reference' ? 'reference_opened' : 'alert_viewed';
+      return {
+        ...item,
+        referenceAnchorId: alert.status === 'reference' ? alert.id : item.referenceAnchorId,
+        history: [...item.history, createEvent(eventType, {
+          caseId: item.id,
+          alertId: alert.id,
+          payload: { alertId: alert.id, phaseKey: alert.phaseKey, source: 'guide_sheet', ...localePayload(locale) },
+        })],
+      };
+    }));
+  };
+
   const openReference = (alert: AlertItem) => {
     if (!selected) return;
-    setMemoTarget(alert.id);
-    setSheetOpen(true);
-    setMobileTab('memo');
-    mutate((list) => list.map((item) => item.id === selected.id ? {
-      ...item,
-      referenceAnchorId: alert.id,
-      history: [...item.history, createEvent('reference_opened', { caseId: item.id, alertId: alert.id, payload: { alertId: alert.id, ...localePayload(locale) } })],
-    } : item));
+    openGuide(alert);
   };
 
   useEffect(() => {
@@ -312,7 +345,7 @@ function App() {
   const renderAlertRow = (alert: AlertItem) => {
     if (!selected) return null;
     const alertTitle = t(locale, alert.titleKey);
-    const expanded = expandedDetails[alert.id] ?? alert.status === 'reference';
+    const guide = resolveGuide(alert.id);
     const memoCount = alertMemoCount(selected, alert.id);
     const actionableMemoLabel = memoCount > 0
       ? `${alertTitle} ${copy[locale].memo} ${memoCount}${copy[locale].memo_count_unit}`
@@ -332,20 +365,15 @@ function App() {
         )}
         <div className="check-copy">
           <h4>{alertTitle}</h4>
-          {alert.detailKey ? (
-            <>
-              {expanded ? <p>{t(locale, alert.detailKey)}</p> : null}
-              <button
-                type="button"
-                className="text-link detail-toggle"
-                onClick={() => setExpandedDetails((prev) => ({ ...prev, [alert.id]: !expanded }))}
-                aria-expanded={expanded}
-                aria-label={`${alertTitle} ${expanded ? copy[locale].detail_less : copy[locale].detail_more}`}
-              >
-                {expanded ? copy[locale].detail_less : copy[locale].detail_more}
-              </button>
-            </>
-          ) : <p>{alert.status === 'done' ? copy[locale].completed : t(locale, `phase.${alert.phaseKey}`)}</p>}
+          <p>{guide.summary}</p>
+          <button
+            type="button"
+            className="text-link detail-toggle"
+            onClick={() => openGuide(alert)}
+            aria-label={`${alertTitle} ${copy[locale].detail_view}`}
+          >
+            {copy[locale].detail_view}
+          </button>
         </div>
         <div className="row-actions">
           {alert.status !== 'reference' ? (
@@ -467,9 +495,32 @@ function App() {
                     <div className="hero-label"><b>{selected.completed ? copy[locale].completed : copy[locale].current_deal_status}</b> {t(locale, `phase.${selected.activePhaseKey}`)}</div>
                     <h2>{selected.title}</h2>
                     <div className="hero-meta">
-                      <span>{copy[locale].deal_type_default}</span>
+                      <span>{transactionLabel(selected.transactionType)}</span>
+                      <span>{propertyLabel(selected.propertyType)}</span>
                       <span>{copy[locale].user_role_default}</span>
                       <span>{copy[locale].closing_date_default}</span>
+                    </div>
+                    <div className="case-profile" aria-label={copy[locale].case_profile}>
+                      <label>
+                        <span>{copy[locale].transaction_type}</span>
+                        <select
+                          aria-label={copy[locale].transaction_type}
+                          value={selected.transactionType}
+                          onChange={(event) => updateCaseProfile(selected.id, { transactionType: event.target.value as TransactionType })}
+                        >
+                          {TRANSACTION_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+                        </select>
+                      </label>
+                      <label>
+                        <span>{copy[locale].property_type}</span>
+                        <select
+                          aria-label={copy[locale].property_type}
+                          value={selected.propertyType}
+                          onChange={(event) => updateCaseProfile(selected.id, { propertyType: event.target.value as PropertyType })}
+                        >
+                          {PROPERTY_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+                        </select>
+                      </label>
                     </div>
                   </div>
                   <div className="progress-ring" style={{ '--progress': `${progressPercent(selected.alerts)}%` } as React.CSSProperties}>
@@ -511,7 +562,7 @@ function App() {
                   </div>
                   <div className="focus-actions">
                     {focusAlert ? (
-                      <button className="outline-btn" onClick={() => setExpandedDetails((prev) => ({ ...prev, [focusAlert.id]: true }))}>{copy[locale].detail_view}</button>
+                      <button className="outline-btn" onClick={() => openGuide(focusAlert)}>{copy[locale].detail_view}</button>
                     ) : null}
                     {focusAlert ? <button className="primary-btn" onClick={() => completeAlert(selected.id, focusAlert.id)}>{copy[locale].complete_action}</button> : null}
                   </div>
@@ -583,7 +634,7 @@ function App() {
                         <label>
                           {referenceSheetOpen && selectedMemoAlert ? t(locale, selectedMemoAlert.titleKey) : copy[locale].memo}
                           {referenceSheetOpen ? null : (
-                            <select value={memoTarget} onChange={(e) => setMemoTarget(e.target.value)}>
+                            <select aria-label={copy[locale].memo_target_label} value={memoTarget} onChange={(e) => setMemoTarget(e.target.value)}>
                               <option value="case">{copy[locale].memo_target_case}</option>
                               {selected.alerts.map((alert) => <option key={alert.id} value={alert.id}>{t(locale, alert.titleKey)}</option>)}
                             </select>
@@ -609,6 +660,115 @@ function App() {
                     </div>
                   </section>
                 ) : null}
+                {selectedGuide && selectedGuideAlert ? (() => {
+                  const sources = resolveGuideSources(selectedGuide);
+                  const branches = resolveGuideBranches(selectedGuide, selected.transactionType, selected.propertyType);
+                  const hasBranches = branches.transaction.length > 0 || branches.property.length > 0;
+                  const isReferenceGuide = selectedGuideAlert.status === 'reference';
+                  const alertTitle = t(locale, selectedGuideAlert.titleKey);
+                  return (
+                    <section
+                      className={`memo-sheet guide-sheet ${isReferenceGuide ? 'reference-guide' : ''}`}
+                      role="dialog"
+                      aria-modal="false"
+                      aria-label={`${alertTitle} ${copy[locale].guide_suffix}`}
+                      style={{ bottom: `${keyboardHeight}px` }}
+                    >
+                      <div className="sheet-handle" aria-hidden="true" />
+                      <div className="sheet-header">
+                        <div className="sheet-heading">
+                          <div className="guide-badges">
+                            <span className="guide-badge">{guideTierLabel(selectedGuide)}</span>
+                            {hasBranches ? <span className="guide-badge branch">{copy[locale].guide_p2_badge}</span> : null}
+                            {isReferenceGuide ? <span className="reference-badge">{copy[locale].reference_only_label}</span> : null}
+                          </div>
+                          <span className="guide-kicker">{t(locale, `phase.${selectedGuide.phaseKey}`)} · {alertTitle}</span>
+                          <h3>{selectedGuide.brokerTitle}</h3>
+                        </div>
+                        <button className="icon-btn dismiss" aria-label={copy[locale].memo_close} onClick={() => setGuideTargetId(null)}>×</button>
+                      </div>
+                      <div className="sheet-body guide-body">
+                        {isReferenceGuide ? <div className="reference-purpose">{copy[locale].reference_purpose}</div> : null}
+                        <p className="guide-summary">{selectedGuide.summary}</p>
+
+                        <section className="guide-block">
+                          <h4>{copy[locale].guide_steps}</h4>
+                          <ol>
+                            {selectedGuide.bullets.map((bullet) => <li key={bullet}>{bullet}</li>)}
+                          </ol>
+                        </section>
+
+                        {branches.transaction.length > 0 ? (
+                          <section className="guide-block branch-block">
+                            <h4>{transactionLabel(selected.transactionType)} {copy[locale].guide_branch_suffix}</h4>
+                            <ul>
+                              {branches.transaction.map((bullet) => <li key={bullet}>{bullet}</li>)}
+                            </ul>
+                          </section>
+                        ) : null}
+
+                        {branches.property.length > 0 ? (
+                          <section className="guide-block branch-block">
+                            <h4>{propertyLabel(selected.propertyType)} {copy[locale].guide_branch_suffix}</h4>
+                            <ul>
+                              {branches.property.map((bullet) => <li key={bullet}>{bullet}</li>)}
+                            </ul>
+                          </section>
+                        ) : null}
+
+                        {selectedGuide.warning ? (
+                          <section className="guide-block warning-block">
+                            <h4>{copy[locale].guide_warning}</h4>
+                            <p>{selectedGuide.warning}</p>
+                          </section>
+                        ) : null}
+
+                        <section className="guide-block done-block">
+                          <h4>{copy[locale].guide_done}</h4>
+                          <p>{selectedGuide.done}</p>
+                        </section>
+
+                        <section className="guide-block source-block">
+                          <h4>{copy[locale].guide_sources}</h4>
+                          <div className="source-list">
+                            {sources.map((source) => source.url ? (
+                              <a key={source.label} href={source.url} target="_blank" rel="noreferrer" title={source.title}>{source.label}</a>
+                            ) : (
+                              <span key={source.label} title={source.title}>{source.label}</span>
+                            ))}
+                          </div>
+                        </section>
+                        <div className="reference-disclaimer">{isReferenceGuide ? copy[locale].reference_disclaimer : copy[locale].guide_common_disclaimer}</div>
+                      </div>
+                      <div className="sheet-actions">
+                        <button
+                          className="outline-btn"
+                          onClick={() => {
+                            setMemoTarget(selectedGuideAlert.id);
+                            setGuideTargetId(null);
+                            setSheetOpen(true);
+                            setMobileTab('memo');
+                          }}
+                        >
+                          {copy[locale].memo_add}
+                        </button>
+                        {!isReferenceGuide && selectedGuideAlert.status !== 'done' ? (
+                          <button
+                            className="primary-btn"
+                            onClick={() => {
+                              completeAlert(selected.id, selectedGuideAlert.id);
+                              setGuideTargetId(null);
+                            }}
+                          >
+                            {copy[locale].complete_action}
+                          </button>
+                        ) : (
+                          <button className="primary-btn" onClick={() => setGuideTargetId(null)}>{copy[locale].memo_close}</button>
+                        )}
+                      </div>
+                    </section>
+                  );
+                })() : null}
               </>
             ) : (
               <section className="empty-state workspace-empty">

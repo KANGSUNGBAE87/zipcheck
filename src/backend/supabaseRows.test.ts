@@ -24,6 +24,7 @@ describe('Supabase row mappers', () => {
     expect(caseRow.owner_auth_user_id).toBe('auth-user-1');
     expect(caseRow.core_user_id).toBe('core-user-1');
     expect(caseRow.title).toBe('서초 래미안 전세');
+    expect(caseRow.payload).toMatchObject({ version: 2, transactionType: 'sale', propertyType: 'apartment' });
     expect(alertRow.case_id).toBe(item.id);
     expect(alertRow.alert_id).toBe(alert.id);
     expect(memoRow.text).toBe('임대인 통화 예정');

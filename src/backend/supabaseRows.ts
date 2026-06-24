@@ -66,7 +66,9 @@ export const caseToRow = (item: CaseItem, ownerAuthUserId: string, coreUserId: s
   last_opened_at: item.lastOpenedAt,
   last_completed_at: item.lastCompletedAt ?? null,
   payload: {
-    version: 1,
+    version: 2,
+    transactionType: item.transactionType,
+    propertyType: item.propertyType,
   },
 });
 

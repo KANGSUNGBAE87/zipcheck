@@ -4,6 +4,26 @@ export type PhaseKey = 'pre_contract' | 'contract_day' | 'deposit_prep' | 'depos
 
 export type AlertStatus = 'pending' | 'done' | 'reference';
 
+export type TransactionType = 'sale' | 'jeonse' | 'monthly_rent' | 'unknown';
+
+export type PropertyType = 'apartment' | 'villa_multi' | 'detached_multi' | 'officetel' | 'unknown';
+
+export const DEFAULT_TRANSACTION_TYPE: TransactionType = 'sale';
+
+export const DEFAULT_PROPERTY_TYPE: PropertyType = 'apartment';
+
+export const TRANSACTION_TYPES: TransactionType[] = ['sale', 'jeonse', 'monthly_rent', 'unknown'];
+
+export const PROPERTY_TYPES: PropertyType[] = ['apartment', 'villa_multi', 'detached_multi', 'officetel', 'unknown'];
+
+export const normalizeTransactionType = (value: unknown): TransactionType => (
+  typeof value === 'string' && TRANSACTION_TYPES.includes(value as TransactionType) ? value as TransactionType : DEFAULT_TRANSACTION_TYPE
+);
+
+export const normalizePropertyType = (value: unknown): PropertyType => (
+  typeof value === 'string' && PROPERTY_TYPES.includes(value as PropertyType) ? value as PropertyType : DEFAULT_PROPERTY_TYPE
+);
+
 export type AlertItem = {
   id: string;
   phaseKey: PhaseKey;
@@ -25,7 +45,7 @@ export type Memo = {
   localeAtWrite: Locale;
 };
 
-export type HistoryEventType = 'session_start' | 'case_created' | 'case_opened' | 'phase_viewed' | 'alert_viewed' | 'alert_completed' | 'alert_undone' | 'memo_opened' | 'memo_saved' | 'reference_opened' | 'history_anchor_opened' | 'case_completed' | 'toss_login_linked';
+export type HistoryEventType = 'session_start' | 'case_created' | 'case_opened' | 'case_profile_updated' | 'phase_viewed' | 'alert_viewed' | 'alert_completed' | 'alert_undone' | 'memo_opened' | 'memo_saved' | 'reference_opened' | 'history_anchor_opened' | 'case_completed' | 'toss_login_linked';
 
 export type HistoryEvent = {
   id: string;
@@ -40,6 +60,8 @@ export type CaseItem = {
   id: string;
   title: string;
   templateId: string;
+  transactionType: TransactionType;
+  propertyType: PropertyType;
   activePhaseKey: PhaseKey;
   alerts: AlertItem[];
   memos: Memo[];

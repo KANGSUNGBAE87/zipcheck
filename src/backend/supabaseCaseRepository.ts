@@ -1,5 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
-import type { AlertItem, CaseItem, HistoryEvent, Memo, PhaseKey } from '../domain';
+import { normalizePropertyType, normalizeTransactionType, type AlertItem, type CaseItem, type HistoryEvent, type Memo, type PhaseKey } from '../domain';
 import type { CaseRepository, RepositoryStatus } from './caseRepository';
 import { eventToRow, alertToRow, caseToRow, memoToRow, type ZipcheckAlertRow, type ZipcheckCaseRow, type ZipcheckEventRow, type ZipcheckMemoRow } from './supabaseRows';
 import { ZIPCHECK_TABLES } from './tableNames';
@@ -15,15 +15,22 @@ const ensureNoError = (response: SupabaseErrorResponse) => {
   }
 };
 
-const rowToCase = (
+export const rowToCase = (
   row: ZipcheckCaseRow,
   alerts: ZipcheckAlertRow[],
   memos: ZipcheckMemoRow[],
   events: ZipcheckEventRow[],
-): CaseItem => ({
+): CaseItem => {
+  const payload = row.payload ?? {};
+  const transactionType = normalizeTransactionType(payload.transactionType);
+  const propertyType = normalizePropertyType(payload.propertyType);
+
+  return {
   id: row.id,
   title: row.title,
   templateId: row.template_id,
+  transactionType,
+  propertyType,
   activePhaseKey: row.active_phase_key as PhaseKey,
   referenceAnchorId: row.reference_anchor_id ?? undefined,
   completed: row.completed,
@@ -64,7 +71,8 @@ const rowToCase = (
       timestamp: event.occurred_at,
       payload: event.payload,
     })),
-});
+  };
+};
 
 export class SupabaseCaseRepository implements CaseRepository {
   constructor(

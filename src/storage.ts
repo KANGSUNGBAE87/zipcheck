@@ -1,4 +1,15 @@
-import type { AlertItem, CaseItem, HistoryEvent, Locale, PhaseKey, Template } from './domain';
+import {
+  normalizePropertyType,
+  normalizeTransactionType,
+  type AlertItem,
+  type CaseItem,
+  type HistoryEvent,
+  type Locale,
+  type PhaseKey,
+  type Template,
+  DEFAULT_PROPERTY_TYPE,
+  DEFAULT_TRANSACTION_TYPE,
+} from './domain';
 
 export const CASES_KEY = 'non-game-market-insights:v2';
 export const EVENTS_KEY = 'non-game-market-insights:events:v1';
@@ -39,6 +50,8 @@ export const createBlankCase = (template: Template, title: string, locale: Local
     id: crypto.randomUUID(),
     title: title.trim() || (locale === 'ko' ? '새 중개 체크리스트' : 'New broker checklist'),
     templateId: template.id,
+    transactionType: DEFAULT_TRANSACTION_TYPE,
+    propertyType: DEFAULT_PROPERTY_TYPE,
     activePhaseKey: resolveActivePhaseKey(flattenAlerts(template)),
     alerts: flattenAlerts(template),
     memos: [],
@@ -51,10 +64,16 @@ export const createBlankCase = (template: Template, title: string, locale: Local
   };
 };
 
+export const normalizeCaseItem = (item: CaseItem): CaseItem => ({
+  ...item,
+  transactionType: normalizeTransactionType((item as Partial<CaseItem>).transactionType),
+  propertyType: normalizePropertyType((item as Partial<CaseItem>).propertyType),
+});
+
 export const loadCases = (): CaseItem[] => {
   const raw = localStorage.getItem(CASES_KEY);
   if (!raw) return [];
-  try { return JSON.parse(raw) as CaseItem[]; } catch { return []; }
+  try { return (JSON.parse(raw) as CaseItem[]).map(normalizeCaseItem); } catch { return []; }
 };
 
 export const saveCases = (cases: CaseItem[]) => localStorage.setItem(CASES_KEY, JSON.stringify(cases));

@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, cleanup } from '@testing-library/react';
+import { fireEvent, render, screen, cleanup, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import App from './App';
 
@@ -58,6 +58,54 @@ describe('App broker checklist MVP', () => {
 
     expect(screen.getAllByText(/인터넷등기소/).length).toBeGreaterThan(0);
     expect(screen.getAllByText(/정부24/).length).toBeGreaterThan(0);
+  });
+
+  it('opens a guide sheet with P1 steps, warning, done criteria, and source chips', () => {
+    render(<App />);
+
+    fireEvent.change(screen.getByRole('textbox', { name: '거래명' }), { target: { value: 'P1 가이드 검증' } });
+    clickButtonByText('새 거래 시작');
+    fireEvent.click(screen.getByRole('button', { name: '계약 전 서류 확인 가이드 보기' }));
+
+    const guide = screen.getByRole('dialog', { name: '계약 전 서류 확인 가이드' });
+    expect(within(guide).getByText('확인 순서')).toBeInTheDocument();
+    expect(within(guide).getByText(/등기사항증명서 갑구ㆍ을구/)).toBeInTheDocument();
+    expect(within(guide).getByText('주의')).toBeInTheDocument();
+    expect(within(guide).getByText('완료 기준')).toBeInTheDocument();
+    expect(within(guide).getByText('확인처')).toBeInTheDocument();
+    expect(within(guide).getByRole('link', { name: '인터넷등기소' })).toBeInTheDocument();
+  });
+
+  it('shows only matched P2 guide branches from the selected deal profile', () => {
+    render(<App />);
+
+    fireEvent.change(screen.getByRole('textbox', { name: '거래명' }), { target: { value: 'P2 분기 검증' } });
+    clickButtonByText('새 거래 시작');
+    fireEvent.change(screen.getByLabelText('거래 유형'), { target: { value: 'jeonse' } });
+    fireEvent.change(screen.getByLabelText('물건 유형'), { target: { value: 'villa_multi' } });
+    fireEvent.click(screen.getByRole('button', { name: '계약 전 서류 확인 가이드 보기' }));
+
+    const guide = screen.getByRole('dialog', { name: '계약 전 서류 확인 가이드' });
+    expect(within(guide).getByText('전세 맞춤')).toBeInTheDocument();
+    expect(within(guide).getByText(/전세는 전입세대ㆍ확정일자ㆍ선순위 보증금/)).toBeInTheDocument();
+    expect(within(guide).getByText('빌라/다세대 맞춤')).toBeInTheDocument();
+    expect(within(guide).getByText(/위반건축물 여부와 실제 구조/)).toBeInTheDocument();
+    expect(within(guide).queryByText(/매매는 이전등기/)).not.toBeInTheDocument();
+    expect(within(guide).queryByText(/관리사무소에서 관리비/)).not.toBeInTheDocument();
+  });
+
+  it('keeps phase 4 guides reference-only without a completion action inside the guide sheet', () => {
+    render(<App />);
+
+    fireEvent.change(screen.getByRole('textbox', { name: '거래명' }), { target: { value: '참고 가이드 검증' } });
+    clickButtonByText('새 거래 시작');
+    fireEvent.click(screen.getByRole('button', { name: /잔금일 참고/ }));
+    fireEvent.click(screen.getByRole('button', { name: '등기/세금 참고자료 참고 보기' }));
+
+    const guide = screen.getByRole('dialog', { name: '등기/세금 참고자료 가이드' });
+    expect(within(guide).getByText('읽기 전용 참고')).toBeInTheDocument();
+    expect(within(guide).getByText('완료 기준')).toBeInTheDocument();
+    expect(within(guide).queryByRole('button', { name: '완료하기' })).not.toBeInTheDocument();
   });
 
   it('uses actionable 12-item progress and separates reference-only items from the next action', () => {
@@ -186,7 +234,7 @@ describe('App broker checklist MVP', () => {
     fireEvent.change(screen.getByRole('textbox', { name: '거래명' }), { target: { value: '메모 인디케이터 검증' } });
     clickButtonByText('새 거래 시작');
     fireEvent.click(screen.getByRole('button', { name: '메모 추가' }));
-    fireEvent.change(screen.getByRole('combobox'), { target: { value: 'pre_docs' } });
+    fireEvent.change(screen.getByRole('combobox', { name: '메모 대상' }), { target: { value: 'pre_docs' } });
     fireEvent.change(screen.getByRole('textbox', { name: '메모' }), { target: { value: '등기부 확인 위치' } });
     fireEvent.click(screen.getByRole('button', { name: '메모 저장' }));
 

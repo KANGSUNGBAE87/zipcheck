@@ -12,6 +12,8 @@ describe('storage and domain helpers', () => {
     expect(item.alerts).toHaveLength(16);
     expect(item.alerts.filter((alert) => alert.status === 'reference')).toHaveLength(4);
     expect(item.referenceAnchorId).toBe('deposit_day_reference');
+    expect(item.transactionType).toBe('sale');
+    expect(item.propertyType).toBe('apartment');
     expect(item.history[1]?.payload).toMatchObject({ locale: 'ko', firstEntry: true });
   });
 
@@ -23,6 +25,19 @@ describe('storage and domain helpers', () => {
     expect(loadAnalyticsQueue()).toHaveLength(1);
     saveAnalyticsQueue([]);
     expect(loadAnalyticsQueue()).toHaveLength(0);
+  });
+
+  it('normalizes legacy cases without a guide profile', () => {
+    const item = createBlankCase(TEMPLATE, '기존 거래', 'ko');
+    const legacy = { ...item } as any;
+    delete legacy.transactionType;
+    delete legacy.propertyType;
+
+    localStorage.setItem('non-game-market-insights:v2', JSON.stringify([legacy]));
+
+    const loaded = loadCases();
+    expect(loaded[0].transactionType).toBe('sale');
+    expect(loaded[0].propertyType).toBe('apartment');
   });
 
   it('advances phases without skipping past post-contract', () => {
