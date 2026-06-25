@@ -46,6 +46,56 @@ const eventLabel = (locale: Locale, event: HistoryEvent) => {
   return t(locale, key);
 };
 
+type MemoFilterKey = 'all' | 'case' | PhaseKey;
+
+type MemoTargetContext = {
+  filterKey: Exclude<MemoFilterKey, 'all'>;
+  phaseLabel: string;
+  itemLabel: string;
+};
+
+type MemoViewItem = MemoTargetContext & {
+  memo: Memo;
+  caseTitle: string;
+};
+
+const resolveMemoTargetContext = (locale: Locale, item: CaseItem, targetId: 'case' | string): MemoTargetContext => {
+  if (targetId === 'case') {
+    return {
+      filterKey: 'case',
+      phaseLabel: copy[locale].memo_target_case,
+      itemLabel: copy[locale].memo_target_case,
+    };
+  }
+
+  const alert = item.alerts.find((entry) => entry.id === targetId);
+  if (!alert) {
+    return {
+      filterKey: 'case',
+      phaseLabel: copy[locale].memo_unknown_target,
+      itemLabel: copy[locale].memo_unknown_target,
+    };
+  }
+
+  return {
+    filterKey: alert.phaseKey,
+    phaseLabel: t(locale, `phase.${alert.phaseKey}`),
+    itemLabel: t(locale, alert.titleKey),
+  };
+};
+
+const resolveMemoViewItem = (locale: Locale, item: CaseItem, memo: Memo): MemoViewItem => ({
+  ...resolveMemoTargetContext(locale, item, memo.targetType === 'case' ? 'case' : memo.targetId),
+  memo,
+  caseTitle: item.title,
+});
+
+const memoTimeLabel = (value: string) => {
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return '';
+  return `${String(parsed.getMonth() + 1).padStart(2, '0')}.${String(parsed.getDate()).padStart(2, '0')} ${String(parsed.getHours()).padStart(2, '0')}:${String(parsed.getMinutes()).padStart(2, '0')}`;
+};
+
 function App() {
   const backend = useMemo(() => createDefaultBackend(), []);
   const repository = backend.repository;
@@ -68,6 +118,7 @@ function App() {
   const [filter, setFilter] = useState<'active' | 'completed' | 'all'>('active');
   const [mobileTab, setMobileTab] = useState<'deals' | 'checklist' | 'memo'>('checklist');
   const [viewPhaseKey, setViewPhaseKey] = useState<PhaseKey | 'all' | null>(null);
+  const [memoFilter, setMemoFilter] = useState<MemoFilterKey>('all');
 
   useEffect(() => {
     const handleResize = () => {
@@ -124,6 +175,8 @@ function App() {
     setSheetOpen(false);
     setMemoTarget('case');
     setGuideTargetId(null);
+    setMemoFilter('all');
+    setDraftMemo('');
   }, [mobileTab]);
 
   const selected = cases.find((item) => item.id === selectedId) ?? null;
@@ -136,6 +189,20 @@ function App() {
     ? selected.alerts.find((alert) => alert.id === guideTargetId) ?? null
     : null;
   const selectedGuide = selectedGuideAlert ? resolveGuide(selectedGuideAlert.id) : null;
+  const selectedMemoContext = selected ? resolveMemoTargetContext(locale, selected, memoTarget) : null;
+  const memoViewItems = selected ? selected.memos.map((memo) => resolveMemoViewItem(locale, selected, memo)).reverse() : [];
+  const memoFilterOptions = selected ? [
+    { key: 'all' as const, label: copy[locale].memo_all, count: memoViewItems.length },
+    { key: 'case' as const, label: copy[locale].memo_target_case, count: memoViewItems.filter((memo) => memo.filterKey === 'case').length },
+    ...TEMPLATE.phaseOrder.map((phaseKey) => ({
+      key: phaseKey,
+      label: t(locale, `phase.${phaseKey}`),
+      count: memoViewItems.filter((memo) => memo.filterKey === phaseKey).length,
+    })),
+  ] : [];
+  const visibleMemoItems = memoFilter === 'all'
+    ? memoViewItems
+    : memoViewItems.filter((memo) => memo.filterKey === memoFilter);
 
   const stats = useMemo(() => ({
     active: cases.filter((item) => !item.completed).length,
@@ -164,6 +231,7 @@ function App() {
   const openCase = (caseId: string, source: 'case_list' | 'history_anchor' = 'case_list') => {
     setSelectedId(caseId);
     setViewPhaseKey(null);
+    setMemoFilter('all');
     setMobileTab('checklist');
     mutate((list) => list.map((item) => item.id === caseId
       ? { ...item, lastOpenedAt: new Date().toISOString(), history: [...item.history, createEvent('case_opened', { caseId, payload: { source, ...localePayload(locale) } })] }
@@ -182,6 +250,7 @@ function App() {
     setViewPhaseKey(null);
     setDraftTitle('');
     setMemoTarget('case');
+    setMemoFilter('all');
     setSheetOpen(false);
     setMobileTab('checklist');
   };
@@ -229,6 +298,9 @@ function App() {
     if (!selected) return;
     const text = draftMemo.trim();
     if (!text) return;
+    const savedMemoFilter = memoTarget === 'case'
+      ? 'case'
+      : selected.alerts.find((alert) => alert.id === memoTarget)?.phaseKey ?? 'all';
     mutate((list) => list.map((item) => {
       if (item.id !== selected.id) return item;
       const now = new Date().toISOString();
@@ -242,6 +314,7 @@ function App() {
     appendAnalyticsEventSafe(createEvent('memo_saved', { caseId: selected.id, payload: { target: memoTarget === 'case' ? 'case' : 'alert', ...localePayload(locale) } }));
     setDraftMemo('');
     setSheetOpen(false);
+    setMemoFilter(savedMemoFilter);
   };
 
   const connectTossLogin = async () => {
@@ -303,6 +376,17 @@ function App() {
     openGuide(alert);
   };
 
+  const openMemoComposer = (target: 'case' | string) => {
+    if (!selected) return;
+    const context = resolveMemoTargetContext(locale, selected, target);
+    setMemoTarget(target);
+    setMemoFilter(context.filterKey);
+    setGuideTargetId(null);
+    setDraftMemo('');
+    setSheetOpen(true);
+    setMobileTab('memo');
+  };
+
   useEffect(() => {
     if (!selected) return;
     mutate((list) => list.map((item) => item.id === selected.id
@@ -346,6 +430,14 @@ function App() {
     if (!selected) return null;
     const alertTitle = t(locale, alert.titleKey);
     const guide = resolveGuide(alert.id);
+    const guideBranches = resolveGuideBranches(guide, selected.transactionType, selected.propertyType);
+    const guideBranchParts = [
+      ...(guideBranches.transaction.length > 0 ? [transactionLabel(selected.transactionType)] : []),
+      ...(guideBranches.property.length > 0 ? [propertyLabel(selected.propertyType)] : []),
+    ];
+    const guideMetaLabel = guideBranchParts.length > 0
+      ? `${guideBranchParts.join(' · ')} ${copy[locale].guide_branch_suffix}`
+      : guideTierLabel(guide);
     const memoCount = alertMemoCount(selected, alert.id);
     const actionableMemoLabel = memoCount > 0
       ? `${alertTitle} ${copy[locale].memo} ${memoCount}${copy[locale].memo_count_unit}`
@@ -368,11 +460,15 @@ function App() {
           <p>{guide.summary}</p>
           <button
             type="button"
-            className="text-link detail-toggle"
+            className={`guide-action detail-toggle ${guideBranchParts.length > 0 ? 'is-tailored' : ''}`}
             onClick={() => openGuide(alert)}
             aria-label={`${alertTitle} ${copy[locale].detail_view}`}
           >
-            {copy[locale].detail_view}
+            <span className="guide-action-main">
+              <span className="guide-action-icon" aria-hidden="true">?</span>
+              <span>{copy[locale].detail_view}</span>
+            </span>
+            <span className="guide-action-meta">{guideMetaLabel}</span>
           </button>
         </div>
         <div className="row-actions">
@@ -381,11 +477,7 @@ function App() {
               type="button"
               className={`memo-indicator ${memoCount > 0 ? 'has-count' : 'is-empty'}`}
               aria-label={actionableMemoLabel}
-              onClick={() => {
-                setMemoTarget(alert.id);
-                setSheetOpen(true);
-                setMobileTab('memo');
-              }}
+              onClick={() => openMemoComposer(alert.id)}
             >
               {memoCount > 0 ? `${copy[locale].memo} ${memoCount}` : copy[locale].memo_add_row}
             </button>
@@ -420,7 +512,6 @@ function App() {
       : formatProgress(locale, displayActionableAlerts.filter((alert) => alert.status === 'done').length, displayActionableAlerts.length || actionableAlerts(selected?.alerts ?? []).length);
   const focusAlert = displayMode === referencePhaseKey ? null : selectedAlert;
   const referenceAlerts = selected?.alerts.filter((alert) => alert.status === 'reference') ?? [];
-  const latestMemo = selected?.memos[selected.memos.length - 1] ?? null;
   const showReferenceLibrary = displayMode !== 'all' && displayMode !== referencePhaseKey;
 
   return (
@@ -590,14 +681,45 @@ function App() {
                   <div className="side-stack">
                     <section className="section-card memo-card">
                       <div className="memo-title">
-                        <h3>{copy[locale].memo}</h3>
-                        <button className="text-link" onClick={() => {
-                          setMemoTarget('case');
-                          setSheetOpen(true);
-                          setMobileTab('memo');
-                        }}>{copy[locale].memo_add}</button>
+                        <div>
+                          <h3>{copy[locale].memo}</h3>
+                          <p>{copy[locale].memo_card_hint}</p>
+                        </div>
+                        <button className="text-link" onClick={() => openMemoComposer('case')}>{copy[locale].memo_add}</button>
                       </div>
-                      <div className="memo-box">{latestMemo ? latestMemo.text : copy[locale].empty_memo}</div>
+                      <section className="memo-panel" aria-label={copy[locale].memo_by_phase}>
+                        <div className="memo-filter-tabs" role="tablist" aria-label={copy[locale].memo_filter_label}>
+                          {memoFilterOptions.map((option) => (
+                            <button
+                              key={option.key}
+                              type="button"
+                              className={memoFilter === option.key ? 'active' : ''}
+                              aria-pressed={memoFilter === option.key}
+                              onClick={() => setMemoFilter(option.key)}
+                            >
+                              <span>{option.label}</span>
+                              <b>{option.count}</b>
+                            </button>
+                          ))}
+                        </div>
+                        {visibleMemoItems.length > 0 ? (
+                          <ol className="memo-list">
+                            {visibleMemoItems.map((entry) => (
+                              <li key={entry.memo.memoId} className="memo-entry">
+                                <div className="memo-entry-top">
+                                  <span className={`memo-scope ${entry.filterKey === 'case' ? 'case' : ''}`}>{entry.phaseLabel}</span>
+                                  <time>{memoTimeLabel(entry.memo.createdAt)}</time>
+                                </div>
+                                <strong>{entry.itemLabel}</strong>
+                                <span className="memo-entry-case">{entry.caseTitle}</span>
+                                <p>{entry.memo.text}</p>
+                              </li>
+                            ))}
+                          </ol>
+                        ) : (
+                          <div className="memo-box">{copy[locale].memo_empty_filtered}</div>
+                        )}
+                      </section>
                     </section>
                     {showReferenceLibrary ? (
                       <section className="section-card reference-library">
@@ -626,7 +748,7 @@ function App() {
                 </div>
 
                 {sheetOpen ? (
-                  <section className="memo-sheet" aria-label={copy[locale].memo} style={{ bottom: `${keyboardHeight}px` }}>
+                  <section className="memo-sheet" role="dialog" aria-modal="false" aria-label={copy[locale].memo} style={{ bottom: `${keyboardHeight}px` }}>
                     <div className="sheet-handle" aria-hidden="true" />
                     <div className="sheet-header">
                       <div className="sheet-heading">
@@ -644,6 +766,16 @@ function App() {
                       <button className="icon-btn dismiss" aria-label={copy[locale].memo_close} onClick={() => setSheetOpen(false)}>×</button>
                     </div>
                     <div className="sheet-body">
+                      {selectedMemoContext ? (
+                        <div className="memo-context-card" aria-label={copy[locale].memo_context_label}>
+                          <span>{copy[locale].memo_context_label}</span>
+                          <strong>{selected.title}</strong>
+                          <div>
+                            <em>{selectedMemoContext.phaseLabel}</em>
+                            <em>{selectedMemoContext.itemLabel}</em>
+                          </div>
+                        </div>
+                      ) : null}
                       {referenceSheetOpen && selectedMemoAlert ? (
                         <>
                           <div className="reference-purpose">{copy[locale].reference_purpose}</div>
@@ -690,6 +822,12 @@ function App() {
                       <div className="sheet-body guide-body">
                         {isReferenceGuide ? <div className="reference-purpose">{copy[locale].reference_purpose}</div> : null}
                         <p className="guide-summary">{selectedGuide.summary}</p>
+                        {hasBranches ? (
+                          <div className="guide-profile-note">
+                            <span>{copy[locale].guide_profile_context}</span>
+                            <strong>{transactionLabel(selected.transactionType)} · {propertyLabel(selected.propertyType)}</strong>
+                          </div>
+                        ) : null}
 
                         <section className="guide-block">
                           <h4>{copy[locale].guide_steps}</h4>
@@ -744,10 +882,8 @@ function App() {
                         <button
                           className="outline-btn"
                           onClick={() => {
-                            setMemoTarget(selectedGuideAlert.id);
+                            openMemoComposer(selectedGuideAlert.id);
                             setGuideTargetId(null);
-                            setSheetOpen(true);
-                            setMobileTab('memo');
                           }}
                         >
                           {copy[locale].memo_add}

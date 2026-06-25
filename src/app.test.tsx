@@ -94,12 +94,25 @@ describe('App broker checklist MVP', () => {
     expect(within(guide).queryByText(/관리사무소에서 관리비/)).not.toBeInTheDocument();
   });
 
+  it('surfaces tailored guide context on checklist row buttons before opening the guide', () => {
+    render(<App />);
+
+    fireEvent.change(screen.getByRole('textbox', { name: '거래명' }), { target: { value: '행 가이드 검증' } });
+    clickButtonByText('새 거래 시작');
+    fireEvent.change(screen.getByLabelText('거래 유형'), { target: { value: 'jeonse' } });
+    fireEvent.change(screen.getByLabelText('물건 유형'), { target: { value: 'villa_multi' } });
+
+    const guideButton = screen.getByRole('button', { name: '계약 전 서류 확인 가이드 보기' });
+    expect(guideButton).toHaveTextContent('가이드 보기');
+    expect(guideButton).toHaveTextContent('전세 · 빌라/다세대 맞춤');
+  });
+
   it('keeps phase 4 guides reference-only without a completion action inside the guide sheet', () => {
     render(<App />);
 
     fireEvent.change(screen.getByRole('textbox', { name: '거래명' }), { target: { value: '참고 가이드 검증' } });
     clickButtonByText('새 거래 시작');
-    fireEvent.click(screen.getByRole('button', { name: /잔금일 참고/ }));
+    fireEvent.click(within(screen.getByLabelText('5단계 흐름')).getByRole('button', { name: /잔금일 참고/ }));
     fireEvent.click(screen.getByRole('button', { name: '등기/세금 참고자료 참고 보기' }));
 
     const guide = screen.getByRole('dialog', { name: '등기/세금 참고자료 가이드' });
@@ -304,14 +317,14 @@ describe('App broker checklist MVP', () => {
     fireEvent.change(screen.getByRole('textbox', { name: '거래명' }), { target: { value: '단계 이동 검증' } });
     clickButtonByText('새 거래 시작');
 
-    fireEvent.click(screen.getByRole('button', { name: /계약 후/ }));
+    fireEvent.click(within(screen.getByLabelText('5단계 흐름')).getByRole('button', { name: /계약 후/ }));
 
     expect(screen.getByText('계약 후 체크리스트')).toBeInTheDocument();
     expect(screen.getAllByText('문서 보관').length).toBeGreaterThan(0);
 
-    fireEvent.click(screen.getByRole('button', { name: /잔금일 참고/ }));
+    fireEvent.click(within(screen.getByLabelText('5단계 흐름')).getByRole('button', { name: /잔금일 참고/ }));
 
-    expect(screen.getByText('잔금일 참고')).toBeInTheDocument();
+    expect(screen.getAllByText('잔금일 참고').length).toBeGreaterThan(0);
     expect(screen.getAllByRole('button', { name: /참고 보기/ })).toHaveLength(4);
     expect(screen.queryByRole('button', { name: /완료하기/ })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: '가이드 보기' })).not.toBeInTheDocument();
@@ -359,6 +372,33 @@ describe('App broker checklist MVP', () => {
 
     expect(screen.getByRole('button', { name: '소유자 정보 확인 메모 1개' })).toBeInTheDocument();
     expect(screen.getByText('메모 1')).toBeInTheDocument();
+  });
+
+  it('connects row-level memos to the memo tab with deal, phase, and checklist context', () => {
+    render(<App />);
+
+    fireEvent.change(screen.getByRole('textbox', { name: '거래명' }), { target: { value: '메모 연결 거래' } });
+    clickButtonByText('새 거래 시작');
+
+    fireEvent.click(screen.getByRole('button', { name: '소유자 정보 확인 메모 추가' }));
+    const sheet = screen.getByRole('dialog', { name: '메모' });
+    expect(within(sheet).getByText('메모 위치')).toBeInTheDocument();
+    expect(within(sheet).getByText('메모 연결 거래')).toBeInTheDocument();
+    expect(within(sheet).getByText('계약 전')).toBeInTheDocument();
+    expect(within(sheet).getAllByText('소유자 정보 확인').length).toBeGreaterThan(0);
+
+    fireEvent.change(screen.getByRole('textbox', { name: '메모' }), { target: { value: '소유자 통화 후 위임장 확인' } });
+    fireEvent.click(screen.getByRole('button', { name: '메모 저장' }));
+
+    fireEvent.click(screen.getByRole('button', { name: '메모' }));
+
+    const memoCard = screen.getByRole('region', { name: '단계별 메모' });
+    expect(within(memoCard).getByRole('button', { name: /전체 메모/ })).toBeInTheDocument();
+    expect(within(memoCard).getByRole('button', { name: /계약 전/ })).toHaveTextContent('1');
+    expect(within(memoCard).getByText('메모 연결 거래')).toBeInTheDocument();
+    expect(within(memoCard).getAllByText('계약 전').length).toBeGreaterThan(0);
+    expect(within(memoCard).getByText('소유자 정보 확인')).toBeInTheDocument();
+    expect(within(memoCard).getByText('소유자 통화 후 위임장 확인')).toBeInTheDocument();
   });
 
   it('shows practical guide copy for post-contract checklist items', () => {
