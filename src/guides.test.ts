@@ -1,9 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import { TEMPLATE } from './domain';
-import { GUIDE_ENTRIES, GUIDE_SOURCES, resolveGuide, resolveGuideBranches } from './guides';
+import { GUIDE_ENTRIES, GUIDE_SOURCES, guideTierLabel, resolveGuide, resolveGuideBranches } from './guides';
 
 const alertIds = TEMPLATE.phaseOrder.flatMap((phaseKey) => TEMPLATE.alertsByPhase[phaseKey].map((alert) => alert.id));
 const bannedPhrases = ['보장', '문제없음', '안전 확정', '법적으로 충분', '대신 처리', '이대로 하면 됨'];
+const internalPlanningLabelPattern = new RegExp(['P[0-2]', '기본', `M${'VP'}`, `구${'현'}`].join('|'));
 
 describe('guide content seed', () => {
   it('has one guide entry for every checklist and reference item', () => {
@@ -18,16 +19,23 @@ describe('guide content seed', () => {
     }
   });
 
-  it('marks P0-only guides and P1/P2 guides explicitly', () => {
-    expect(resolveGuide('contract_copy').tier).toBe('P0');
-    expect(resolveGuide('contract_signature').tier).toBe('P0');
-    expect(resolveGuide('deposit_ref_parties').tier).toBe('P0');
-    expect(resolveGuide('post_archive').tier).toBe('P0');
-    expect(resolveGuide('pre_docs').tier).toBe('P1_P2');
+  it('marks simple guides and detailed guides explicitly', () => {
+    expect(resolveGuide('contract_copy').tier).toBe('simple');
+    expect(resolveGuide('contract_signature').tier).toBe('simple');
+    expect(resolveGuide('deposit_ref_parties').tier).toBe('simple');
+    expect(resolveGuide('post_archive').tier).toBe('simple');
+    expect(resolveGuide('pre_docs').tier).toBe('detailed');
     expect(resolveGuide('deposit_ref_docs').itemKind).toBe('reference');
   });
 
-  it('returns only matched P2 transaction and property branches', () => {
+  it('maps internal guide tiers to user-facing labels without P-stage wording', () => {
+    expect(guideTierLabel(resolveGuide('contract_copy'))).toBe('확인 가이드');
+    expect(guideTierLabel(resolveGuide('pre_docs'))).toBe('상세 가이드');
+    expect(guideTierLabel(resolveGuide('contract_copy'))).not.toMatch(internalPlanningLabelPattern);
+    expect(guideTierLabel(resolveGuide('pre_docs'))).not.toMatch(internalPlanningLabelPattern);
+  });
+
+  it('returns only matched transaction and property guide branches', () => {
     const branches = resolveGuideBranches(resolveGuide('pre_docs'), 'jeonse', 'villa_multi');
     const joined = [...branches.transaction, ...branches.property].join(' ');
 

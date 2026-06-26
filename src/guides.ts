@@ -1,6 +1,6 @@
 import type { AlertStatus, PhaseKey, PropertyType, TransactionType } from './domain';
 
-export type GuideTier = 'P0' | 'P1_P2';
+export type GuideTier = 'simple' | 'detailed';
 
 export type GuideSource = {
   label: string;
@@ -195,7 +195,7 @@ export const GUIDE_ENTRIES: Record<string, GuideEntry> = {
     checklistId: 'pre_docs',
     phaseKey: 'pre_contract',
     itemKind: 'actionable',
-    tier: 'P1_P2',
+    tier: 'detailed',
     appTitle: '계약 전 서류 확인',
     brokerTitle: '계약 전 근거자료 확인',
     sourceLabels: ['확인설명서 서식', '인터넷등기소', '정부24 건축물대장', '정부24 토지대장', '토지이음', '정부24 국세증명', '정부24 지방세증명'],
@@ -214,7 +214,7 @@ export const GUIDE_ENTRIES: Record<string, GuideEntry> = {
     checklistId: 'pre_owner',
     phaseKey: 'pre_contract',
     itemKind: 'actionable',
-    tier: 'P1_P2',
+    tier: 'detailed',
     appTitle: '소유자 정보 확인',
     brokerTitle: '등기상 소유자ㆍ대리 여부 확인',
     sourceLabels: ['인터넷등기소', '정부24 등기 안내', '확인설명서 서식'],
@@ -232,7 +232,7 @@ export const GUIDE_ENTRIES: Record<string, GuideEntry> = {
     checklistId: 'pre_walkthrough',
     phaseKey: 'pre_contract',
     itemKind: 'actionable',
-    tier: 'P1_P2',
+    tier: 'detailed',
     appTitle: '현장 안내 사항 점검',
     brokerTitle: '현장 상태ㆍ안내 포인트 확인',
     sourceLabels: ['확인설명서 서식'],
@@ -251,7 +251,7 @@ export const GUIDE_ENTRIES: Record<string, GuideEntry> = {
     checklistId: 'contract_confirm',
     phaseKey: 'contract_day',
     itemKind: 'actionable',
-    tier: 'P1_P2',
+    tier: 'detailed',
     appTitle: '계약 조건 재확인',
     brokerTitle: '계약 조건ㆍ특약 재확인',
     sourceLabels: ['공인중개사법 시행령', '확인설명서 서식', '부동산거래관리'],
@@ -269,7 +269,7 @@ export const GUIDE_ENTRIES: Record<string, GuideEntry> = {
     checklistId: 'contract_copy',
     phaseKey: 'contract_day',
     itemKind: 'actionable',
-    tier: 'P0',
+    tier: 'simple',
     appTitle: '계약서 사본 확보',
     brokerTitle: '계약서 사본 전달ㆍ보관 확인',
     sourceLabels: ['공인중개사법 시행령'],
@@ -285,7 +285,7 @@ export const GUIDE_ENTRIES: Record<string, GuideEntry> = {
     checklistId: 'contract_signature',
     phaseKey: 'contract_day',
     itemKind: 'actionable',
-    tier: 'P0',
+    tier: 'simple',
     appTitle: '서명 일정 맞추기',
     brokerTitle: '당사자 서명 일정 조율',
     sourceLabels: ['공인중개사법 시행령'],
@@ -301,14 +301,14 @@ export const GUIDE_ENTRIES: Record<string, GuideEntry> = {
     checklistId: 'deposit_transfer',
     phaseKey: 'deposit_prep',
     itemKind: 'actionable',
-    tier: 'P1_P2',
+    tier: 'detailed',
     appTitle: '잔금 이체 준비',
     brokerTitle: '잔금 이체 준비 공유ㆍ확인',
     sourceLabels: ['인터넷등기소', '부동산거래관리'],
     summary: '잔금 흐름과 이체 준비 상태를 당사자와 공유합니다.',
     bullets: [
       '잔금 계좌가 소유자 또는 합의된 수령인인지 확인합니다.',
-      '대출 실행ㆍ법무사 일정이 있으면 시간표에 반영합니다.',
+      '대출 실행ㆍ법무사 일정이 있으면 시간표에 넣습니다.',
       '이체한도ㆍOTPㆍ은행 방문 필요 여부를 사전 안내합니다.',
     ],
     warning: '계좌 변경 요청은 근거와 당사자 확인을 다시 받습니다.',
@@ -319,7 +319,7 @@ export const GUIDE_ENTRIES: Record<string, GuideEntry> = {
     checklistId: 'deposit_receipt',
     phaseKey: 'deposit_prep',
     itemKind: 'actionable',
-    tier: 'P1_P2',
+    tier: 'detailed',
     appTitle: '입금 확인 자료 정리',
     brokerTitle: '입금 증빙 자료 정리',
     sourceLabels: ['부동산거래관리'],
@@ -337,7 +337,7 @@ export const GUIDE_ENTRIES: Record<string, GuideEntry> = {
     checklistId: 'deposit_schedule',
     phaseKey: 'deposit_prep',
     itemKind: 'actionable',
-    tier: 'P1_P2',
+    tier: 'detailed',
     appTitle: '이체 시간표 확인',
     brokerTitle: '잔금일 이체 일정 조율',
     sourceLabels: ['부동산거래관리'],
@@ -355,7 +355,7 @@ export const GUIDE_ENTRIES: Record<string, GuideEntry> = {
     checklistId: 'deposit_ref_docs',
     phaseKey: 'deposit_day_reference',
     itemKind: 'reference',
-    tier: 'P1_P2',
+    tier: 'detailed',
     appTitle: '등기/세금 참고자료',
     brokerTitle: '잔금일 등기ㆍ비용 참고',
     sourceLabels: ['인터넷등기소', '위택스', '확인설명서 서식'],
@@ -374,7 +374,7 @@ export const GUIDE_ENTRIES: Record<string, GuideEntry> = {
     checklistId: 'deposit_ref_parties',
     phaseKey: 'deposit_day_reference',
     itemKind: 'reference',
-    tier: 'P0',
+    tier: 'simple',
     appTitle: '당사자 연락 참고',
     brokerTitle: '거래 당사자ㆍ실무 연락처 참고',
     sourceLabels: ['확인설명서 서식'],
@@ -390,7 +390,7 @@ export const GUIDE_ENTRIES: Record<string, GuideEntry> = {
     checklistId: 'deposit_ref_final',
     phaseKey: 'deposit_day_reference',
     itemKind: 'reference',
-    tier: 'P1_P2',
+    tier: 'detailed',
     appTitle: '최종 확인 항목',
     brokerTitle: '잔금 직전 최종 참고',
     sourceLabels: ['인터넷등기소', '확인설명서 서식'],
@@ -409,7 +409,7 @@ export const GUIDE_ENTRIES: Record<string, GuideEntry> = {
     checklistId: 'deposit_ref_after',
     phaseKey: 'deposit_day_reference',
     itemKind: 'reference',
-    tier: 'P1_P2',
+    tier: 'detailed',
     appTitle: '잔금 후 참고',
     brokerTitle: '잔금 후 후속 일정 참고',
     sourceLabels: ['정부24 전입신고', '정부24 임대차신고', '부동산거래관리'],
@@ -428,7 +428,7 @@ export const GUIDE_ENTRIES: Record<string, GuideEntry> = {
     checklistId: 'post_archive',
     phaseKey: 'post_contract',
     itemKind: 'actionable',
-    tier: 'P0',
+    tier: 'simple',
     appTitle: '문서 보관',
     brokerTitle: '거래 문서 보관',
     sourceLabels: ['공인중개사법', '공인중개사법 시행령'],
@@ -444,7 +444,7 @@ export const GUIDE_ENTRIES: Record<string, GuideEntry> = {
     checklistId: 'post_followup',
     phaseKey: 'post_contract',
     itemKind: 'actionable',
-    tier: 'P1_P2',
+    tier: 'detailed',
     appTitle: '사후 연락',
     brokerTitle: '사후 연락ㆍ피드백 확인',
     sourceLabels: ['실무 메모'],
@@ -462,7 +462,7 @@ export const GUIDE_ENTRIES: Record<string, GuideEntry> = {
     checklistId: 'post_utility',
     phaseKey: 'post_contract',
     itemKind: 'actionable',
-    tier: 'P1_P2',
+    tier: 'detailed',
     appTitle: '후속 처리 정리',
     brokerTitle: '잔금 후 정산ㆍ후속 일정 추적',
     sourceLabels: ['정부24 전입신고', '정부24 임대차신고', '위택스'],
@@ -496,7 +496,7 @@ export const resolveGuideBranches = (
   property: entry.propertyBranches?.[propertyType] ?? [],
 });
 
-export const guideTierLabel = (entry: GuideEntry) => (entry.tier === 'P0' ? 'P0 기본' : 'P1 상세');
+export const guideTierLabel = (entry: GuideEntry) => (entry.tier === 'simple' ? '확인 가이드' : '상세 가이드');
 
 export const transactionLabel = (value: TransactionType) => TRANSACTION_OPTIONS.find((option) => option.value === value)?.label ?? '미정';
 

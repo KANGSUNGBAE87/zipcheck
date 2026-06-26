@@ -33,6 +33,24 @@ const alertMemoCount = (item: CaseItem, alertId: string) => {
   return item.memos.filter((memo) => memo.targetType === 'alert' && memo.targetId === alertId && memoIds.has(memo.memoId)).length;
 };
 
+const alertMemos = (item: CaseItem, alertId: string) => {
+  const alert = item.alerts.find((entry) => entry.id === alertId);
+  if (!alert) return [];
+  const memoIds = new Set(alert.memoIds);
+  return item.memos
+    .filter((memo) => memo.targetType === 'alert' && memo.targetId === alertId && memoIds.has(memo.memoId))
+    .sort((a, b) => memoSortTime(a) - memoSortTime(b));
+};
+
+const formatCount = (locale: Locale, count: number) => (locale === 'ko' ? `${count}개` : `${count}`);
+
+const memoDeleteLabel = (locale: Locale, itemLabel: string, memo: Memo) => {
+  const excerpt = memo.text.trim().replace(/\s+/g, ' ').slice(0, 24);
+  return excerpt
+    ? `${itemLabel} ${copy[locale].memo_delete_action}: ${excerpt}`
+    : `${itemLabel} ${copy[locale].memo_delete_action}`;
+};
+
 const formatProgress = (locale: Locale, done: number, total: number) => (
   locale === 'ko' ? `${done} / ${total} 완료` : `${done} / ${total} complete`
 );
@@ -41,12 +59,7 @@ const formatRemaining = (locale: Locale, remaining: number) => (
   locale === 'ko' ? `${remaining}개 남음` : `${remaining} remaining`
 );
 
-const eventLabel = (locale: Locale, event: HistoryEvent) => {
-  const key = `activity_${event.type}`;
-  return t(locale, key);
-};
-
-type MemoFilterKey = 'all' | 'case' | PhaseKey;
+type MemoFilterKey = 'all' | 'misc' | PhaseKey;
 
 type MemoTargetContext = {
   filterKey: Exclude<MemoFilterKey, 'all'>;
@@ -57,21 +70,34 @@ type MemoTargetContext = {
 type MemoViewItem = MemoTargetContext & {
   memo: Memo;
   caseTitle: string;
+  sortIndex: number;
+  sortTime: number;
+};
+
+const memoSortIndex = (item: CaseItem, memo: Memo) => {
+  if (memo.targetType === 'case') return item.alerts.length + 1;
+  const alertIndex = item.alerts.findIndex((alert) => alert.id === memo.targetId);
+  return alertIndex >= 0 ? alertIndex : item.alerts.length + 2;
+};
+
+const memoSortTime = (memo: Memo) => {
+  const parsed = new Date(memo.createdAt).getTime();
+  return Number.isNaN(parsed) ? 0 : parsed;
 };
 
 const resolveMemoTargetContext = (locale: Locale, item: CaseItem, targetId: 'case' | string): MemoTargetContext => {
   if (targetId === 'case') {
     return {
-      filterKey: 'case',
-      phaseLabel: copy[locale].memo_target_case,
-      itemLabel: copy[locale].memo_target_case,
+      filterKey: 'misc',
+      phaseLabel: copy[locale].memo_misc,
+      itemLabel: copy[locale].memo_misc_item,
     };
   }
 
   const alert = item.alerts.find((entry) => entry.id === targetId);
   if (!alert) {
     return {
-      filterKey: 'case',
+      filterKey: 'misc',
       phaseLabel: copy[locale].memo_unknown_target,
       itemLabel: copy[locale].memo_unknown_target,
     };
@@ -84,16 +110,65 @@ const resolveMemoTargetContext = (locale: Locale, item: CaseItem, targetId: 'cas
   };
 };
 
-const resolveMemoViewItem = (locale: Locale, item: CaseItem, memo: Memo): MemoViewItem => ({
-  ...resolveMemoTargetContext(locale, item, memo.targetType === 'case' ? 'case' : memo.targetId),
-  memo,
-  caseTitle: item.title,
-});
+const resolveMemoViewItem = (locale: Locale, item: CaseItem, memo: Memo): MemoViewItem => {
+  const sortIndex = memoSortIndex(item, memo);
+  return {
+    ...resolveMemoTargetContext(locale, item, memo.targetType === 'case' ? 'case' : memo.targetId),
+    memo,
+    caseTitle: item.title,
+    sortIndex,
+    sortTime: memoSortTime(memo),
+  };
+};
+
+const compareMemoViewItems = (a: MemoViewItem, b: MemoViewItem) => {
+  if (a.sortIndex !== b.sortIndex) return a.sortIndex - b.sortIndex;
+  if (a.sortTime !== b.sortTime) return a.sortTime - b.sortTime;
+  return a.memo.memoId.localeCompare(b.memo.memoId);
+};
 
 const memoTimeLabel = (value: string) => {
   const parsed = new Date(value);
   if (Number.isNaN(parsed.getTime())) return '';
   return `${String(parsed.getMonth() + 1).padStart(2, '0')}.${String(parsed.getDate()).padStart(2, '0')} ${String(parsed.getHours()).padStart(2, '0')}:${String(parsed.getMinutes()).padStart(2, '0')}`;
+};
+
+const MemoWorkspaceIllustration = () => (
+  <svg className="memo-illustration" viewBox="0 0 128 96" role="img" aria-hidden="true">
+    <rect x="15" y="16" width="72" height="64" rx="10" fill="#FFFFFF" stroke="#B8CBD2" strokeWidth="3" />
+    <path d="M32 35h38M32 49h31M32 63h26" stroke="#1B7059" strokeWidth="4" strokeLinecap="round" />
+    <rect x="74" y="27" width="34" height="44" rx="9" fill="#E7F4EE" stroke="#7EAEA0" strokeWidth="3" />
+    <path d="M84 42h15M84 55h11" stroke="#173F4F" strokeWidth="4" strokeLinecap="round" />
+    <circle cx="26" cy="24" r="6" fill="#F7F1E7" stroke="#B76A12" strokeWidth="3" />
+    <path d="m25 24 2 2 4-5" stroke="#1B7059" strokeWidth="3" fill="none" strokeLinecap="round" strokeLinejoin="round" />
+  </svg>
+);
+
+const FolderIcon = () => (
+  <svg className="folder-icon" viewBox="0 0 36 28" aria-hidden="true">
+    <path d="M3 9.5C3 6.5 5.3 4 8.2 4h6.1l3 4h10.5c3 0 5.2 2.4 5.2 5.4v8.4c0 3-2.3 5.2-5.2 5.2H8.2C5.3 27 3 24.8 3 21.8V9.5Z" fill="#F7F1E7" stroke="#B76A12" strokeWidth="2.2" />
+    <path d="M4.8 13h26.4" stroke="#D99B4A" strokeWidth="2" strokeLinecap="round" />
+  </svg>
+);
+
+const ChecklistIllustration = () => (
+  <svg className="tab-icon" viewBox="0 0 28 28" aria-hidden="true">
+    <rect x="6" y="4" width="16" height="20" rx="4" fill="#FFFFFF" stroke="currentColor" strokeWidth="2" />
+    <path d="M10 11h8M10 16h8" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+    <path d="m10 21 2 2 4-5" stroke="#1B7059" strokeWidth="2" fill="none" strokeLinecap="round" strokeLinejoin="round" />
+  </svg>
+);
+
+const TabIcon = ({ kind }: { kind: 'deals' | 'checklist' | 'memo' }) => {
+  if (kind === 'deals') return <FolderIcon />;
+  if (kind === 'checklist') return <ChecklistIllustration />;
+  return (
+    <svg className="tab-icon" viewBox="0 0 28 28" aria-hidden="true">
+      <rect x="5" y="6" width="18" height="16" rx="4" fill="#FFFFFF" stroke="currentColor" strokeWidth="2" />
+      <path d="M9 12h10M9 17h6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+      <circle cx="21" cy="8" r="4" fill="#E7F4EE" stroke="#1B7059" strokeWidth="2" />
+    </svg>
+  );
 };
 
 function App() {
@@ -119,6 +194,9 @@ function App() {
   const [mobileTab, setMobileTab] = useState<'deals' | 'checklist' | 'memo'>('checklist');
   const [viewPhaseKey, setViewPhaseKey] = useState<PhaseKey | 'all' | null>(null);
   const [memoFilter, setMemoFilter] = useState<MemoFilterKey>('all');
+  const [memoFilterMenuOpen, setMemoFilterMenuOpen] = useState(false);
+  const [openMemoDropdownId, setOpenMemoDropdownId] = useState<string | null>(null);
+  const [dealFolderOpen, setDealFolderOpen] = useState({ active: true, completed: true });
 
   useEffect(() => {
     const handleResize = () => {
@@ -176,6 +254,8 @@ function App() {
     setMemoTarget('case');
     setGuideTargetId(null);
     setMemoFilter('all');
+    setMemoFilterMenuOpen(false);
+    setOpenMemoDropdownId(null);
     setDraftMemo('');
   }, [mobileTab]);
 
@@ -190,10 +270,10 @@ function App() {
     : null;
   const selectedGuide = selectedGuideAlert ? resolveGuide(selectedGuideAlert.id) : null;
   const selectedMemoContext = selected ? resolveMemoTargetContext(locale, selected, memoTarget) : null;
-  const memoViewItems = selected ? selected.memos.map((memo) => resolveMemoViewItem(locale, selected, memo)).reverse() : [];
+  const memoViewItems = selected ? selected.memos.map((memo) => resolveMemoViewItem(locale, selected, memo)).sort(compareMemoViewItems) : [];
   const memoFilterOptions = selected ? [
     { key: 'all' as const, label: copy[locale].memo_all, count: memoViewItems.length },
-    { key: 'case' as const, label: copy[locale].memo_target_case, count: memoViewItems.filter((memo) => memo.filterKey === 'case').length },
+    { key: 'misc' as const, label: copy[locale].memo_misc, count: memoViewItems.filter((memo) => memo.filterKey === 'misc').length },
     ...TEMPLATE.phaseOrder.map((phaseKey) => ({
       key: phaseKey,
       label: t(locale, `phase.${phaseKey}`),
@@ -203,6 +283,7 @@ function App() {
   const visibleMemoItems = memoFilter === 'all'
     ? memoViewItems
     : memoViewItems.filter((memo) => memo.filterKey === memoFilter);
+  const selectedMemoFilterOption = memoFilterOptions.find((option) => option.key === memoFilter) ?? memoFilterOptions[0] ?? { key: 'all' as const, label: copy[locale].memo_all, count: 0 };
 
   const stats = useMemo(() => ({
     active: cases.filter((item) => !item.completed).length,
@@ -218,6 +299,8 @@ function App() {
       return matchesSearch && (matchesFilter || item.id === selectedId);
     });
   }, [cases, filter, searchTerm, selectedId]);
+  const activeDealCases = filteredCases.filter((item) => !item.completed);
+  const completedDealCases = filteredCases.filter((item) => item.completed);
 
   const mutate = (updater: (list: CaseItem[]) => CaseItem[]) => setCases((prev) => {
     const next = updater(prev).map((item) => ({ ...item, updatedAt: new Date().toISOString() }));
@@ -232,6 +315,8 @@ function App() {
     setSelectedId(caseId);
     setViewPhaseKey(null);
     setMemoFilter('all');
+    setMemoFilterMenuOpen(false);
+    setOpenMemoDropdownId(null);
     setMobileTab('checklist');
     mutate((list) => list.map((item) => item.id === caseId
       ? { ...item, lastOpenedAt: new Date().toISOString(), history: [...item.history, createEvent('case_opened', { caseId, payload: { source, ...localePayload(locale) } })] }
@@ -251,6 +336,8 @@ function App() {
     setDraftTitle('');
     setMemoTarget('case');
     setMemoFilter('all');
+    setMemoFilterMenuOpen(false);
+    setOpenMemoDropdownId(null);
     setSheetOpen(false);
     setMobileTab('checklist');
   };
@@ -299,7 +386,7 @@ function App() {
     const text = draftMemo.trim();
     if (!text) return;
     const savedMemoFilter = memoTarget === 'case'
-      ? 'case'
+      ? 'misc'
       : selected.alerts.find((alert) => alert.id === memoTarget)?.phaseKey ?? 'all';
     mutate((list) => list.map((item) => {
       if (item.id !== selected.id) return item;
@@ -315,6 +402,43 @@ function App() {
     setDraftMemo('');
     setSheetOpen(false);
     setMemoFilter(savedMemoFilter);
+    setMemoFilterMenuOpen(false);
+    setOpenMemoDropdownId(null);
+  };
+
+  const deleteMemo = (memoId: string) => {
+    if (!selected) return;
+    const memoToDelete = selected.memos.find((memo) => memo.memoId === memoId);
+    if (!memoToDelete) return;
+    const deletedAlertId = memoToDelete.targetType === 'alert' ? memoToDelete.targetId : undefined;
+    const remainingAlertMemos = deletedAlertId
+      ? selected.memos.filter((memo) => memo.memoId !== memoId && memo.targetType === 'alert' && memo.targetId === deletedAlertId).length
+      : 0;
+    const target = memoToDelete.targetType === 'case' ? 'case' : 'alert';
+    mutate((list) => list.map((item) => {
+      if (item.id !== selected.id) return item;
+      const alerts = item.alerts.map((alert) => (
+        alert.id === deletedAlertId
+          ? { ...alert, memoIds: alert.memoIds.filter((id) => id !== memoId) }
+          : alert
+      ));
+      const memos = item.memos.filter((memo) => memo.memoId !== memoId);
+      const history = [...item.history, createEvent('memo_deleted', {
+        caseId: item.id,
+        alertId: deletedAlertId,
+        payload: { target, ...localePayload(locale) },
+      })];
+      return { ...item, alerts, memos, history };
+    }));
+    appendAnalyticsEventSafe(createEvent('memo_deleted', {
+      caseId: selected.id,
+      alertId: deletedAlertId,
+      payload: { target, ...localePayload(locale) },
+    }));
+    setMemoFilterMenuOpen(false);
+    if (deletedAlertId && openMemoDropdownId === deletedAlertId && remainingAlertMemos === 0) {
+      setOpenMemoDropdownId(null);
+    }
   };
 
   const connectTossLogin = async () => {
@@ -382,6 +506,8 @@ function App() {
     setMemoTarget(target);
     setMemoFilter(context.filterKey);
     setGuideTargetId(null);
+    setOpenMemoDropdownId(null);
+    setMemoFilterMenuOpen(false);
     setDraftMemo('');
     setSheetOpen(true);
     setMobileTab('memo');
@@ -426,6 +552,30 @@ function App() {
     );
   };
 
+  const renderDealFolder = (key: 'active' | 'completed', label: string, items: CaseItem[]) => {
+    if (items.length === 0) return null;
+    const isOpen = dealFolderOpen[key];
+    const countLabel = formatCount(locale, items.length);
+    return (
+      <section key={key} className={`deal-folder ${key}`} aria-label={`${label} ${countLabel} ${copy[locale].folder_label}`}>
+        <button
+          type="button"
+          className="deal-folder-toggle"
+          aria-expanded={isOpen}
+          onClick={() => setDealFolderOpen((prev) => ({ ...prev, [key]: !prev[key] }))}
+        >
+          <FolderIcon />
+          <span>
+            <strong>{label}</strong>
+            <em>{copy[locale].deal_folder_hint}</em>
+          </span>
+          <b>{countLabel}</b>
+        </button>
+        {isOpen ? <div className="deal-folder-list">{items.map(renderDealCard)}</div> : null}
+      </section>
+    );
+  };
+
   const renderAlertRow = (alert: AlertItem) => {
     if (!selected) return null;
     const alertTitle = t(locale, alert.titleKey);
@@ -436,12 +586,13 @@ function App() {
       ...(guideBranches.property.length > 0 ? [propertyLabel(selected.propertyType)] : []),
     ];
     const guideMetaLabel = guideBranchParts.length > 0
-      ? `${guideBranchParts.join(' · ')} ${copy[locale].guide_branch_suffix}`
+      ? guideBranchParts.join(' · ')
       : guideTierLabel(guide);
-    const memoCount = alertMemoCount(selected, alert.id);
-    const actionableMemoLabel = memoCount > 0
-      ? `${alertTitle} ${copy[locale].memo} ${memoCount}${copy[locale].memo_count_unit}`
-      : `${alertTitle} ${copy[locale].memo_add_row}`;
+    const linkedMemos = alertMemos(selected, alert.id);
+    const memoCount = linkedMemos.length;
+    const actionableMemoLabel = `${alertTitle} ${copy[locale].memo_add_row}`;
+    const memoReviewLabel = `${alertTitle} ${copy[locale].memo} ${formatCount(locale, memoCount)} ${copy[locale].memo_view}`;
+    const memoDropdownOpen = openMemoDropdownId === alert.id;
     return (
       <div key={alert.id} className={`check-row ${alert.status} ${alert.status === 'done' ? 'completed' : ''}`}>
         {alert.status === 'reference' ? (
@@ -473,14 +624,52 @@ function App() {
         </div>
         <div className="row-actions">
           {alert.status !== 'reference' ? (
-            <button
-              type="button"
-              className={`memo-indicator ${memoCount > 0 ? 'has-count' : 'is-empty'}`}
-              aria-label={actionableMemoLabel}
-              onClick={() => openMemoComposer(alert.id)}
-            >
-              {memoCount > 0 ? `${copy[locale].memo} ${memoCount}` : copy[locale].memo_add_row}
-            </button>
+            <div className="row-memo-tools">
+              {memoCount > 0 ? (
+                <div className={`memo-review ${memoDropdownOpen ? 'open' : ''}`}>
+                  <button
+                    type="button"
+                    className="memo-review-toggle"
+                    aria-label={memoReviewLabel}
+                    aria-expanded={memoDropdownOpen}
+                    onClick={() => setOpenMemoDropdownId((current) => (current === alert.id ? null : alert.id))}
+                  >
+                    <span>{copy[locale].memo} {formatCount(locale, memoCount)} {copy[locale].memo_view}</span>
+                    <b aria-hidden="true">⌄</b>
+                  </button>
+                  {memoDropdownOpen ? (
+                    <div className="memo-review-panel" role="region" aria-label={`${alertTitle} ${copy[locale].memo_saved_list}`}>
+                      <ol>
+                        {linkedMemos.map((memo) => (
+                          <li key={memo.memoId}>
+                            <div className="memo-review-meta">
+                              <time>{memoTimeLabel(memo.createdAt)}</time>
+                              <button
+                                type="button"
+                                className="memo-delete-btn"
+                                aria-label={memoDeleteLabel(locale, alertTitle, memo)}
+                                onClick={() => deleteMemo(memo.memoId)}
+                              >
+                                {copy[locale].memo_delete}
+                              </button>
+                            </div>
+                            <p>{memo.text}</p>
+                          </li>
+                        ))}
+                      </ol>
+                    </div>
+                  ) : null}
+                </div>
+              ) : null}
+              <button
+                type="button"
+                className="memo-add-icon"
+                aria-label={actionableMemoLabel}
+                onClick={() => openMemoComposer(alert.id)}
+              >
+                <span aria-hidden="true">+</span>
+              </button>
+            </div>
           ) : null}
           {alert.status === 'reference' ? (
             <button type="button" className="soft-btn" aria-label={`${alertTitle} ${copy[locale].reference_view_label}`} onClick={() => openReference(alert)}>
@@ -571,7 +760,12 @@ function App() {
                 <p>{copy[locale].empty_home}</p>
                 <button className="soft-btn" onClick={() => createCase(true)}>{copy[locale].sample_tour}</button>
               </div>
-            ) : filteredCases.map(renderDealCard)}
+            ) : (
+              <div className="deal-folder-stack">
+                {(filter === 'active' || filter === 'all' || activeDealCases.some((item) => item.id === selectedId)) ? renderDealFolder('active', copy[locale].active_deal_folder, activeDealCases) : null}
+                {(filter === 'completed' || filter === 'all' || completedDealCases.some((item) => item.id === selectedId)) ? renderDealFolder('completed', copy[locale].completed_deal_folder, completedDealCases) : null}
+              </div>
+            )}
             <div className="local-note">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true"><rect x="5" y="10" width="14" height="10" rx="2" /><path d="M8 10V7a4 4 0 0 1 8 0v3" /></svg>
               <span>{copy[locale].trust_notice}</span>
@@ -685,30 +879,67 @@ function App() {
                           <h3>{copy[locale].memo}</h3>
                           <p>{copy[locale].memo_card_hint}</p>
                         </div>
-                        <button className="text-link" onClick={() => openMemoComposer('case')}>{copy[locale].memo_add}</button>
+                      </div>
+                      <div className="memo-visual-band">
+                        <MemoWorkspaceIllustration />
+                        <div>
+                          <strong>{copy[locale].memo_board_title}</strong>
+                          <span>{copy[locale].memo_card_hint}</span>
+                        </div>
                       </div>
                       <section className="memo-panel" aria-label={copy[locale].memo_by_phase}>
-                        <div className="memo-filter-tabs" role="tablist" aria-label={copy[locale].memo_filter_label}>
-                          {memoFilterOptions.map((option) => (
+                        <div className="memo-toolbar">
+                          <div className={`memo-filter-dropdown ${memoFilterMenuOpen ? 'open' : ''}`}>
                             <button
-                              key={option.key}
                               type="button"
-                              className={memoFilter === option.key ? 'active' : ''}
-                              aria-pressed={memoFilter === option.key}
-                              onClick={() => setMemoFilter(option.key)}
+                              className="memo-filter-current"
+                              aria-label={`${copy[locale].memo_filter_label}: ${selectedMemoFilterOption.label} ${formatCount(locale, selectedMemoFilterOption.count)}`}
+                              aria-expanded={memoFilterMenuOpen}
+                              onClick={() => setMemoFilterMenuOpen((open) => !open)}
                             >
-                              <span>{option.label}</span>
-                              <b>{option.count}</b>
+                              <span>{copy[locale].memo_filter_label}</span>
+                              <strong>{selectedMemoFilterOption.label}</strong>
+                              <b>{formatCount(locale, selectedMemoFilterOption.count)}</b>
                             </button>
-                          ))}
+                            {memoFilterMenuOpen ? (
+                              <div className="memo-filter-menu" role="menu">
+                                {memoFilterOptions.map((option) => (
+                                  <button
+                                    key={option.key}
+                                    type="button"
+                                    role="menuitem"
+                                    className={memoFilter === option.key ? 'active' : ''}
+                                    onClick={() => {
+                                      setMemoFilter(option.key);
+                                      setMemoFilterMenuOpen(false);
+                                    }}
+                                  >
+                                    <span>{option.label}</span>
+                                    <b>{formatCount(locale, option.count)}</b>
+                                  </button>
+                                ))}
+                              </div>
+                            ) : null}
+                          </div>
+                          <button className="memo-add-main" aria-label={`+ ${copy[locale].memo_add}`} onClick={() => openMemoComposer('case')}><span aria-hidden="true">+</span> {copy[locale].memo_add}</button>
                         </div>
                         {visibleMemoItems.length > 0 ? (
                           <ol className="memo-list">
                             {visibleMemoItems.map((entry) => (
                               <li key={entry.memo.memoId} className="memo-entry">
                                 <div className="memo-entry-top">
-                                  <span className={`memo-scope ${entry.filterKey === 'case' ? 'case' : ''}`}>{entry.phaseLabel}</span>
-                                  <time>{memoTimeLabel(entry.memo.createdAt)}</time>
+                                  <span className={`memo-scope ${entry.filterKey === 'misc' ? 'misc' : ''}`}>{entry.phaseLabel}</span>
+                                  <div className="memo-entry-actions">
+                                    <time>{memoTimeLabel(entry.memo.createdAt)}</time>
+                                    <button
+                                      type="button"
+                                      className="memo-delete-btn"
+                                      aria-label={memoDeleteLabel(locale, entry.itemLabel, entry.memo)}
+                                      onClick={() => deleteMemo(entry.memo.memoId)}
+                                    >
+                                      {copy[locale].memo_delete}
+                                    </button>
+                                  </div>
                                 </div>
                                 <strong>{entry.itemLabel}</strong>
                                 <span className="memo-entry-case">{entry.caseTitle}</span>
@@ -732,23 +963,11 @@ function App() {
                         {referenceAlerts.map(renderAlertRow)}
                       </section>
                     ) : null}
-                    <section className="section-card activity-card">
-                      <div className="memo-title"><h3>{copy[locale].activity_timeline}</h3></div>
-                      <ol className="activity-list">
-                        {selected.history.slice(-5).reverse().map((event) => (
-                          <li key={event.id}><span>{eventLabel(locale, event)}</span><time>{copy[locale].activity_just_now}</time></li>
-                        ))}
-                      </ol>
-                      <button className="text-link" onClick={() => {
-                        mutate((list) => list.map((item) => item.id === selected.id ? { ...item, history: [...item.history, createEvent('history_anchor_opened', { caseId: item.id, payload: { source: 'history_anchor', ...localePayload(locale) } })] } : item));
-                        openCase(selected.id, 'history_anchor');
-                      }}>{copy[locale].reopen}</button>
-                    </section>
                   </div>
                 </div>
 
                 {sheetOpen ? (
-                  <section className="memo-sheet" role="dialog" aria-modal="false" aria-label={copy[locale].memo} style={{ bottom: `${keyboardHeight}px` }}>
+                  <section className="memo-sheet" role="dialog" aria-modal="false" aria-label={copy[locale].memo} style={keyboardHeight > 0 ? { bottom: `${keyboardHeight}px` } : undefined}>
                     <div className="sheet-handle" aria-hidden="true" />
                     <div className="sheet-header">
                       <div className="sheet-heading">
@@ -787,7 +1006,7 @@ function App() {
                       <p className="muted">{selectedMemoAlert ? t(locale, selectedMemoAlert.titleKey) : selectedAlert ? t(locale, selectedAlert.titleKey) : selectedReferenceAlert(selected) ? t(locale, selectedReferenceAlert(selected)!.titleKey) : copy[locale].empty_memo}</p>
                     </div>
                     <div className="sheet-actions">
-                      <button className="primary-btn" onClick={saveMemo}>{copy[locale].memo_save}</button>
+                      <button type="button" className="primary-btn memo-save-btn" onClick={saveMemo} disabled={!draftMemo.trim()}>{copy[locale].memo_save}</button>
                       <button className="outline-btn" onClick={() => setSheetOpen(false)}>{copy[locale].memo_close}</button>
                     </div>
                   </section>
@@ -804,14 +1023,14 @@ function App() {
                       role="dialog"
                       aria-modal="false"
                       aria-label={`${alertTitle} ${copy[locale].guide_suffix}`}
-                      style={{ bottom: `${keyboardHeight}px` }}
+                      style={keyboardHeight > 0 ? { bottom: `${keyboardHeight}px` } : undefined}
                     >
                       <div className="sheet-handle" aria-hidden="true" />
                       <div className="sheet-header">
                         <div className="sheet-heading">
                           <div className="guide-badges">
                             <span className="guide-badge">{guideTierLabel(selectedGuide)}</span>
-                            {hasBranches ? <span className="guide-badge branch">{copy[locale].guide_p2_badge}</span> : null}
+                            {hasBranches ? <span className="guide-badge branch">{copy[locale].guide_context_badge}</span> : null}
                             {isReferenceGuide ? <span className="reference-badge">{copy[locale].reference_only_label}</span> : null}
                           </div>
                           <span className="guide-kicker">{t(locale, `phase.${selectedGuide.phaseKey}`)} · {alertTitle}</span>
@@ -919,9 +1138,21 @@ function App() {
       </div>
 
       <nav className="mobile-tab">
-        <button className={mobileTab === 'deals' ? 'active' : ''} onClick={() => setMobileTab('deals')}>{copy[locale].mobile_tab_deals}</button>
-        <button className={mobileTab === 'checklist' ? 'active' : ''} onClick={() => setMobileTab('checklist')}>{copy[locale].mobile_tab_checklist}</button>
-        <button className={mobileTab === 'memo' ? 'active' : ''} onClick={() => setMobileTab('memo')}>{copy[locale].mobile_tab_memo}</button>
+        <button className={mobileTab === 'deals' ? 'active' : ''} onClick={() => setMobileTab('deals')}>
+          <TabIcon kind="deals" />
+          <span>{copy[locale].mobile_tab_deals}</span>
+          <small aria-hidden="true">{copy[locale].mobile_tab_deals_hint}</small>
+        </button>
+        <button className={mobileTab === 'checklist' ? 'active' : ''} onClick={() => setMobileTab('checklist')}>
+          <TabIcon kind="checklist" />
+          <span>{copy[locale].mobile_tab_checklist}</span>
+          <small aria-hidden="true">{copy[locale].mobile_tab_checklist_hint}</small>
+        </button>
+        <button className={mobileTab === 'memo' ? 'active' : ''} onClick={() => setMobileTab('memo')}>
+          <TabIcon kind="memo" />
+          <span>{copy[locale].mobile_tab_memo}</span>
+          <small aria-hidden="true">{copy[locale].mobile_tab_memo_hint}</small>
+        </button>
       </nav>
     </div>
   );

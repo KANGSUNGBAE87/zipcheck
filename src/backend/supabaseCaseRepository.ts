@@ -130,10 +130,28 @@ export class SupabaseCaseRepository implements CaseRepository {
     const alertRows = cases.flatMap((item) => item.alerts.map((alert, index) => alertToRow(item.id, alert, ownerAuthUserId, index)));
     const memoRows = cases.flatMap((item) => item.memos.map((memo) => memoToRow(item.id, memo, ownerAuthUserId)));
     const eventRows = cases.flatMap((item) => item.history.map((event) => eventToRow(event, ownerAuthUserId)));
+    const caseIds = cases.map((item) => item.id);
 
     ensureNoError(await this.supabase.from(ZIPCHECK_TABLES.cases).upsert(caseRows, { onConflict: 'id' }));
     if (alertRows.length > 0) ensureNoError(await this.supabase.from(ZIPCHECK_TABLES.caseAlerts).upsert(alertRows, { onConflict: 'case_id,alert_id' }));
     if (memoRows.length > 0) ensureNoError(await this.supabase.from(ZIPCHECK_TABLES.memos).upsert(memoRows, { onConflict: 'memo_id' }));
+    const memoResponse = await this.supabase
+      .from(ZIPCHECK_TABLES.memos)
+      .select('memo_id')
+      .eq('owner_auth_user_id', ownerAuthUserId)
+      .in('case_id', caseIds);
+    ensureNoError(memoResponse);
+    const currentMemoIds = new Set(memoRows.map((memo) => memo.memo_id));
+    const staleMemoIds = ((memoResponse.data ?? []) as Pick<ZipcheckMemoRow, 'memo_id'>[])
+      .map((memo) => memo.memo_id)
+      .filter((memoId) => !currentMemoIds.has(memoId));
+    if (staleMemoIds.length > 0) {
+      ensureNoError(await this.supabase
+        .from(ZIPCHECK_TABLES.memos)
+        .delete()
+        .eq('owner_auth_user_id', ownerAuthUserId)
+        .in('memo_id', staleMemoIds));
+    }
     if (eventRows.length > 0) ensureNoError(await this.supabase.from(ZIPCHECK_TABLES.events).upsert(eventRows, { onConflict: 'id' }));
   }
 

@@ -45,7 +45,7 @@ export type Memo = {
   localeAtWrite: Locale;
 };
 
-export type HistoryEventType = 'session_start' | 'case_created' | 'case_opened' | 'case_profile_updated' | 'phase_viewed' | 'alert_viewed' | 'alert_completed' | 'alert_undone' | 'memo_opened' | 'memo_saved' | 'reference_opened' | 'history_anchor_opened' | 'case_completed' | 'toss_login_linked';
+export type HistoryEventType = 'session_start' | 'case_created' | 'case_opened' | 'case_profile_updated' | 'phase_viewed' | 'alert_viewed' | 'alert_completed' | 'alert_undone' | 'memo_opened' | 'memo_saved' | 'memo_deleted' | 'reference_opened' | 'history_anchor_opened' | 'case_completed' | 'toss_login_linked';
 
 export type HistoryEvent = {
   id: string;

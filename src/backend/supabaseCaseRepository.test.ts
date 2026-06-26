@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { rowToCase } from './supabaseCaseRepository';
-import type { ZipcheckAlertRow, ZipcheckCaseRow } from './supabaseRows';
+import type { SupabaseClient } from '@supabase/supabase-js';
+import { TEMPLATE, type CaseItem, type Memo } from '../domain';
+import { createBlankCase, createEvent } from '../storage';
+import { SupabaseCaseRepository, rowToCase } from './supabaseCaseRepository';
+import { ZIPCHECK_TABLES, type ZipcheckTableName } from './tableNames';
+import type { ZipcheckAlertRow, ZipcheckCaseRow, ZipcheckEventRow, ZipcheckMemoRow } from './supabaseRows';
 
 const now = '2026-06-25T00:00:00.000Z';
 
@@ -34,6 +38,118 @@ const baseAlertRow: ZipcheckAlertRow = {
   position: 0,
 };
 
+type FakeDb = {
+  [ZIPCHECK_TABLES.cases]: ZipcheckCaseRow[];
+  [ZIPCHECK_TABLES.caseAlerts]: ZipcheckAlertRow[];
+  [ZIPCHECK_TABLES.memos]: ZipcheckMemoRow[];
+  [ZIPCHECK_TABLES.events]: ZipcheckEventRow[];
+};
+
+type FakeTableName = keyof FakeDb;
+
+const createFakeSupabase = (db: FakeDb) => ({
+  auth: {
+    getSession: async () => ({ data: { session: { user: { id: 'auth-user-1' } } }, error: null }),
+    signInAnonymously: async () => ({ data: { user: { id: 'auth-user-1' } }, error: null }),
+  },
+  from: (table: ZipcheckTableName) => new FakeQuery(db, table as FakeTableName),
+});
+
+class FakeQuery {
+  private action: 'select' | 'delete' | null = null;
+  private filters: Array<{ column: string; value: unknown }> = [];
+  private inFilters: Array<{ column: string; values: unknown[] }> = [];
+
+  constructor(
+    private readonly db: FakeDb,
+    private readonly table: FakeTableName,
+  ) {}
+
+  select() {
+    this.action = 'select';
+    return this;
+  }
+
+  delete() {
+    this.action = 'delete';
+    return this;
+  }
+
+  eq(column: string, value: unknown) {
+    this.filters.push({ column, value });
+    return this;
+  }
+
+  in(column: string, values: unknown[]) {
+    this.inFilters.push({ column, values });
+    return this;
+  }
+
+  order() {
+    return this;
+  }
+
+  async upsert(rows: unknown | unknown[], options?: { onConflict?: string }) {
+    const nextRows = Array.isArray(rows) ? rows : [rows];
+    const conflict = options?.onConflict ?? 'id';
+    const keys = conflict.split(',').map((key) => key.trim());
+    const tableRows = this.db[this.table] as Array<Record<string, unknown>>;
+    nextRows.forEach((row) => {
+      const rowRecord = row as Record<string, unknown>;
+      const index = tableRows.findIndex((candidate) => keys.every((key) => candidate[key] === rowRecord[key]));
+      if (index >= 0) {
+        tableRows[index] = rowRecord;
+      } else {
+        tableRows.push(rowRecord);
+      }
+    });
+    return { error: null };
+  }
+
+  then<TResult1 = { data: unknown[]; error: null }, TResult2 = never>(
+    onfulfilled?: ((value: { data: unknown[]; error: null }) => TResult1 | PromiseLike<TResult1>) | null,
+    onrejected?: ((reason: unknown) => TResult2 | PromiseLike<TResult2>) | null,
+  ) {
+    return Promise.resolve(this.execute()).then(onfulfilled, onrejected);
+  }
+
+  private execute() {
+    const tableRows = this.db[this.table] as Array<Record<string, unknown>>;
+    const matches = (row: Record<string, unknown>) => (
+      this.filters.every((filter) => row[filter.column] === filter.value)
+      && this.inFilters.every((filter) => filter.values.includes(row[filter.column]))
+    );
+
+    if (this.action === 'delete') {
+      const kept = tableRows.filter((row) => !matches(row));
+      tableRows.splice(0, tableRows.length, ...kept);
+      return { data: [], error: null };
+    }
+
+    return { data: tableRows.filter(matches), error: null };
+  }
+}
+
+const emptyDb = (): FakeDb => ({
+  [ZIPCHECK_TABLES.cases]: [],
+  [ZIPCHECK_TABLES.caseAlerts]: [],
+  [ZIPCHECK_TABLES.memos]: [],
+  [ZIPCHECK_TABLES.events]: [],
+});
+
+const withMemo = (item: CaseItem, memo: Memo): CaseItem => ({
+  ...item,
+  memos: [memo],
+  alerts: item.alerts.map((alert, index) => index === 0 ? { ...alert, memoIds: [memo.memoId] } : alert),
+});
+
+const withoutMemo = (item: CaseItem, memo: Memo): CaseItem => ({
+  ...item,
+  memos: [],
+  alerts: item.alerts.map((alert) => alert.id === memo.targetId ? { ...alert, memoIds: [] } : alert),
+  history: [...item.history, createEvent('memo_deleted', { caseId: item.id, alertId: memo.targetId, payload: { target: 'alert', locale: 'ko' } })],
+});
+
 describe('SupabaseCaseRepository row mapping', () => {
   it('normalizes invalid guide profile values from remote payloads', () => {
     const item = rowToCase(baseCaseRow, [baseAlertRow], [], []);
@@ -50,5 +166,29 @@ describe('SupabaseCaseRepository row mapping', () => {
 
     expect(item.transactionType).toBe('jeonse');
     expect(item.propertyType).toBe('villa_multi');
+  });
+
+  it('removes remote memo rows that no longer exist in the saved case snapshot', async () => {
+    const db = emptyDb();
+    const repository = new SupabaseCaseRepository(createFakeSupabase(db) as unknown as SupabaseClient, () => 'core-user-1');
+    const item = createBlankCase(TEMPLATE, '원격 메모 삭제 검증', 'ko');
+    const memo: Memo = {
+      memoId: 'memo-1',
+      targetType: 'alert',
+      targetId: item.alerts[0].id,
+      text: '원격에서 사라져야 하는 메모',
+      createdAt: now,
+      updatedAt: now,
+      localeAtWrite: 'ko',
+    };
+
+    await repository.saveCases([withMemo(item, memo)]);
+    expect(db[ZIPCHECK_TABLES.memos]).toHaveLength(1);
+
+    await repository.saveCases([withoutMemo(withMemo(item, memo), memo)]);
+
+    expect(db[ZIPCHECK_TABLES.memos]).toHaveLength(0);
+    expect(db[ZIPCHECK_TABLES.caseAlerts][0].memo_ids).toEqual([]);
+    expect((await repository.loadCases())[0].memos).toEqual([]);
   });
 });
