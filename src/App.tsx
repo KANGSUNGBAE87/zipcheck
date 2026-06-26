@@ -44,11 +44,11 @@ const alertMemos = (item: CaseItem, alertId: string) => {
 
 const formatCount = (locale: Locale, count: number) => (locale === 'ko' ? `${count}개` : `${count}`);
 
-const memoDeleteLabel = (locale: Locale, itemLabel: string, memo: Memo) => {
-  const excerpt = memo.text.trim().replace(/\s+/g, ' ').slice(0, 24);
-  return excerpt
-    ? `${itemLabel} ${copy[locale].memo_delete_action}: ${excerpt}`
-    : `${itemLabel} ${copy[locale].memo_delete_action}`;
+const memoDeleteLabel = (locale: Locale, itemLabel: string, position?: number) => {
+  if (position === undefined) return `${itemLabel} ${copy[locale].memo_delete_action}`;
+  return locale === 'ko'
+    ? `${itemLabel} ${position}${copy[locale].memo_delete_position_suffix} ${copy[locale].memo_delete_action}`
+    : `${itemLabel} ${copy[locale].memo_delete_action} ${position}`;
 };
 
 const formatProgress = (locale: Locale, done: number, total: number) => (
@@ -191,7 +191,7 @@ function App() {
   const [guideTargetId, setGuideTargetId] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [filter, setFilter] = useState<'active' | 'completed' | 'all'>('active');
-  const [mobileTab, setMobileTab] = useState<'deals' | 'checklist' | 'memo'>('checklist');
+  const [mobileTab, setMobileTab] = useState<'deals' | 'checklist' | 'memo'>('deals');
   const [viewPhaseKey, setViewPhaseKey] = useState<PhaseKey | 'all' | null>(null);
   const [memoFilter, setMemoFilter] = useState<MemoFilterKey>('all');
   const [memoFilterMenuOpen, setMemoFilterMenuOpen] = useState(false);
@@ -640,14 +640,14 @@ function App() {
                   {memoDropdownOpen ? (
                     <div className="memo-review-panel" role="region" aria-label={`${alertTitle} ${copy[locale].memo_saved_list}`}>
                       <ol>
-                        {linkedMemos.map((memo) => (
+                        {linkedMemos.map((memo, memoIndex) => (
                           <li key={memo.memoId}>
                             <div className="memo-review-meta">
                               <time>{memoTimeLabel(memo.createdAt)}</time>
                               <button
                                 type="button"
                                 className="memo-delete-btn"
-                                aria-label={memoDeleteLabel(locale, alertTitle, memo)}
+                                aria-label={memoDeleteLabel(locale, alertTitle, memoIndex + 1)}
                                 onClick={() => deleteMemo(memo.memoId)}
                               >
                                 {copy[locale].memo_delete}
@@ -925,7 +925,7 @@ function App() {
                         </div>
                         {visibleMemoItems.length > 0 ? (
                           <ol className="memo-list">
-                            {visibleMemoItems.map((entry) => (
+                            {visibleMemoItems.map((entry, memoIndex) => (
                               <li key={entry.memo.memoId} className="memo-entry">
                                 <div className="memo-entry-top">
                                   <span className={`memo-scope ${entry.filterKey === 'misc' ? 'misc' : ''}`}>{entry.phaseLabel}</span>
@@ -934,7 +934,7 @@ function App() {
                                     <button
                                       type="button"
                                       className="memo-delete-btn"
-                                      aria-label={memoDeleteLabel(locale, entry.itemLabel, entry.memo)}
+                                      aria-label={memoDeleteLabel(locale, entry.itemLabel, memoIndex + 1)}
                                       onClick={() => deleteMemo(entry.memo.memoId)}
                                     >
                                       {copy[locale].memo_delete}

@@ -23,6 +23,7 @@ ai/
 stages/
 graphify-out/
 .graphifyignore
+ZIPCHECK_final_plan/
 .agents/
 .antigravity-task-*.md
 .claude/

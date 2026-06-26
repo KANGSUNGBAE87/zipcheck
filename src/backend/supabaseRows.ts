@@ -1,4 +1,5 @@
 import type { AlertItem, CaseItem, HistoryEvent, Memo } from '../domain';
+import { sanitizeAnalyticsEvent } from '../storage';
 
 export type ZipcheckCaseRow = {
   id: string;
@@ -105,5 +106,5 @@ export const eventToRow = (event: HistoryEvent, ownerAuthUserId: string): Zipche
   alert_id: event.alertId ?? null,
   event_type: event.type,
   occurred_at: event.timestamp,
-  payload: event.payload,
+  payload: sanitizeAnalyticsEvent(event).payload,
 });

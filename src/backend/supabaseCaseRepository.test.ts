@@ -47,10 +47,22 @@ type FakeDb = {
 
 type FakeTableName = keyof FakeDb;
 
-const createFakeSupabase = (db: FakeDb) => ({
+type FakeAuthUser = { id: string };
+
+type FakeAuth = {
+  getSession: () => Promise<{ data: { session: { user: FakeAuthUser } | null }; error: null }>;
+  signInAnonymously: () => Promise<{ data: { user: FakeAuthUser | null }; error: null }>;
+};
+
+const defaultFakeAuth: FakeAuth = {
+  getSession: async () => ({ data: { session: { user: { id: 'auth-user-1' } } }, error: null }),
+  signInAnonymously: async () => ({ data: { user: { id: 'auth-user-1' } }, error: null }),
+};
+
+const createFakeSupabase = (db: FakeDb, auth: FakeAuth = defaultFakeAuth) => ({
   auth: {
-    getSession: async () => ({ data: { session: { user: { id: 'auth-user-1' } } }, error: null }),
-    signInAnonymously: async () => ({ data: { user: { id: 'auth-user-1' } }, error: null }),
+    getSession: auth.getSession,
+    signInAnonymously: auth.signInAnonymously,
   },
   from: (table: ZipcheckTableName) => new FakeQuery(db, table as FakeTableName),
 });
@@ -190,5 +202,63 @@ describe('SupabaseCaseRepository row mapping', () => {
     expect(db[ZIPCHECK_TABLES.memos]).toHaveLength(0);
     expect(db[ZIPCHECK_TABLES.caseAlerts][0].memo_ids).toEqual([]);
     expect((await repository.loadCases())[0].memos).toEqual([]);
+  });
+
+  it('sanitizes remote analytics payloads on append and load', async () => {
+    const db = emptyDb();
+    const repository = new SupabaseCaseRepository(createFakeSupabase(db) as unknown as SupabaseClient, () => 'core-user-1');
+    const unsafeEvent = createEvent('memo_saved', {
+      caseId: 'case-1',
+      payload: {
+        locale: 'ko',
+        target: 'case',
+        memoText: '원격 큐에 남으면 안 되는 메모',
+        title: '원격 큐에 남으면 안 되는 거래명',
+        authorizationCode: 'remote-auth-code',
+        coreUserId: 'remote-core-user-id',
+      } as any,
+    });
+
+    await repository.appendAnalyticsEvent(unsafeEvent);
+
+    expect(db[ZIPCHECK_TABLES.events][0].payload).toEqual({ locale: 'ko', target: 'case' });
+    expect(JSON.stringify(db[ZIPCHECK_TABLES.events][0])).not.toContain('원격 큐에 남으면 안 되는 메모');
+
+    db[ZIPCHECK_TABLES.events].push({
+      id: 'legacy-remote-event',
+      case_id: 'case-1',
+      owner_auth_user_id: 'auth-user-1',
+      alert_id: null,
+      event_type: 'memo_deleted',
+      occurred_at: now,
+      payload: {
+        locale: 'ko',
+        target: 'case',
+        memoText: '로드 중 제거되어야 하는 메모',
+        caseTitle: '로드 중 제거되어야 하는 거래명',
+      } as any,
+    });
+
+    const loadedQueue = await repository.loadAnalyticsQueue();
+    expect(loadedQueue.find((event) => event.id === 'legacy-remote-event')?.payload).toEqual({ locale: 'ko', target: 'case' });
+  });
+
+  it('deduplicates concurrent anonymous sign-in for a shared Supabase client', async () => {
+    const db = emptyDb();
+    let signInCalls = 0;
+    const supabase = createFakeSupabase(db, {
+      getSession: async () => ({ data: { session: null }, error: null }),
+      signInAnonymously: async () => {
+        signInCalls += 1;
+        return { data: { user: { id: 'auth-user-1' } }, error: null };
+      },
+    }) as unknown as SupabaseClient;
+
+    await Promise.all([
+      new SupabaseCaseRepository(supabase).loadAnalyticsQueue(),
+      new SupabaseCaseRepository(supabase).loadAnalyticsQueue(),
+    ]);
+
+    expect(signInCalls).toBe(1);
   });
 });

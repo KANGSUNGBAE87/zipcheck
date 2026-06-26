@@ -1,5 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { normalizePropertyType, normalizeTransactionType, type AlertItem, type CaseItem, type HistoryEvent, type Memo, type PhaseKey } from '../domain';
+import { sanitizeAnalyticsEvent } from '../storage';
 import type { CaseRepository, RepositoryStatus } from './caseRepository';
 import { eventToRow, alertToRow, caseToRow, memoToRow, type ZipcheckAlertRow, type ZipcheckCaseRow, type ZipcheckEventRow, type ZipcheckMemoRow } from './supabaseRows';
 import { ZIPCHECK_TABLES } from './tableNames';
@@ -14,6 +15,8 @@ const ensureNoError = (response: SupabaseErrorResponse) => {
     throw new Error(response.error.message ?? 'Supabase request failed');
   }
 };
+
+const ownerAuthUserIdRequests = new WeakMap<SupabaseClient, Promise<string>>();
 
 export const rowToCase = (
   row: ZipcheckCaseRow,
@@ -63,7 +66,7 @@ export const rowToCase = (
     })),
   history: events
     .sort((left, right) => left.occurred_at.localeCompare(right.occurred_at))
-    .map<HistoryEvent>((event) => ({
+    .map<HistoryEvent>((event) => sanitizeAnalyticsEvent({
       id: event.id,
       type: event.event_type as HistoryEvent['type'],
       caseId: event.case_id ?? undefined,
@@ -164,7 +167,7 @@ export class SupabaseCaseRepository implements CaseRepository {
       .order('occurred_at', { ascending: true });
     ensureNoError(response);
 
-    return ((response.data ?? []) as ZipcheckEventRow[]).map((event) => ({
+    return ((response.data ?? []) as ZipcheckEventRow[]).map((event) => sanitizeAnalyticsEvent({
       id: event.id,
       type: event.event_type as HistoryEvent['type'],
       caseId: event.case_id ?? undefined,
@@ -180,6 +183,16 @@ export class SupabaseCaseRepository implements CaseRepository {
   }
 
   private async getOwnerAuthUserId(): Promise<string> {
+    const pending = ownerAuthUserIdRequests.get(this.supabase);
+    if (pending) return pending;
+
+    const request = this.resolveOwnerAuthUserId()
+      .finally(() => ownerAuthUserIdRequests.delete(this.supabase));
+    ownerAuthUserIdRequests.set(this.supabase, request);
+    return request;
+  }
+
+  private async resolveOwnerAuthUserId(): Promise<string> {
     const sessionResponse = await this.supabase.auth.getSession();
     if (sessionResponse.error) throw new Error(sessionResponse.error.message);
     if (sessionResponse.data.session?.user.id) return sessionResponse.data.session.user.id;

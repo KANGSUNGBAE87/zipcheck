@@ -1,8 +1,9 @@
 import { fireEvent, render, screen, cleanup, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import App from './App';
+import { CASES_KEY, EVENTS_KEY } from './storage';
 
-const getCase = () => JSON.parse(localStorage.getItem('non-game-market-insights:v2') ?? '[]')[0];
+const getCase = () => JSON.parse(localStorage.getItem(CASES_KEY) ?? '[]')[0];
 const clickButtonByText = (text: string) => {
   const button = screen.getAllByRole('button').find((candidate) => candidate.textContent === text);
   expect(button).toBeTruthy();
@@ -16,6 +17,29 @@ beforeEach(() => {
 });
 
 describe('App broker checklist', () => {
+  it('starts mobile navigation on the deal folder tab before a case is opened', () => {
+    const { container } = render(<App />);
+
+    expect(container.querySelector('.app-shell')).toHaveClass('mobile-tab-deals');
+    expect(screen.getByRole('button', { name: '거래' })).toHaveClass('active');
+    expect(screen.getByRole('button', { name: '체크리스트' })).not.toHaveClass('active');
+  });
+
+  it('moves from the deal tab into the checklist after creating or reopening a case', () => {
+    const { container } = render(<App />);
+
+    fireEvent.change(screen.getByRole('textbox', { name: '거래명' }), { target: { value: 'P0 모바일 흐름' } });
+    clickButtonByText('새 거래 시작');
+
+    expect(container.querySelector('.app-shell')).toHaveClass('mobile-tab-checklist');
+    fireEvent.click(screen.getByRole('button', { name: '거래' }));
+    expect(container.querySelector('.app-shell')).toHaveClass('mobile-tab-deals');
+
+    fireEvent.click(screen.getByRole('button', { name: /P0 모바일 흐름/ }));
+
+    expect(container.querySelector('.app-shell')).toHaveClass('mobile-tab-checklist');
+  });
+
   it('renders the redesigned ZipCheck dashboard shell and labeled summary cards', () => {
     render(<App />);
 
@@ -171,13 +195,13 @@ describe('App broker checklist', () => {
     fireEvent.change(screen.getByRole('textbox', { name: '거래명' }), { target: { value: '첫 거래' } });
     clickButtonByText('새 거래 시작');
 
-    const stored = JSON.parse(localStorage.getItem('non-game-market-insights:v2') ?? '[]');
+    const stored = JSON.parse(localStorage.getItem(CASES_KEY) ?? '[]');
     expect(stored).toHaveLength(1);
     expect(stored[0].history.some((event: { type: string; payload?: { firstEntry?: boolean; locale?: string } }) => event.type === 'session_start' && event.payload?.firstEntry && event.payload?.locale === 'ko')).toBe(true);
     expect(screen.getAllByText(/지금 확인할 항목/).length).toBeGreaterThan(0);
     expect(screen.getAllByText('로그인하지 않아도 저장됩니다. 토스 로그인 연결 시 계정에 이어서 보관합니다.')[0]).toBeInTheDocument();
     expect(screen.queryByText('Back')).not.toBeInTheDocument();
-    const analytics = JSON.parse(localStorage.getItem('non-game-market-insights:events:v1') ?? '[]');
+    const analytics = JSON.parse(localStorage.getItem(EVENTS_KEY) ?? '[]');
     expect(analytics.some((event: { type: string; payload?: { locale?: string; phaseKey?: string } }) => event.type === 'phase_viewed' && event.payload?.phaseKey === 'pre_contract' && event.payload?.locale === 'ko')).toBe(true);
   });
 
@@ -242,19 +266,40 @@ describe('App broker checklist', () => {
     clickButtonByText('새 거래 시작');
     fireEvent.click(screen.getByRole('button', { name: '+ 메모 추가' }));
     expect(screen.getAllByRole('button', { name: '닫기' })[0]).toBeInTheDocument();
-    const memoOpened = JSON.parse(localStorage.getItem('non-game-market-insights:events:v1') ?? '[]');
+    const memoOpened = JSON.parse(localStorage.getItem(EVENTS_KEY) ?? '[]');
     expect(memoOpened.some((event: { type: string; payload?: { locale?: string } }) => event.type === 'memo_opened' && event.payload?.locale === 'ko')).toBe(true);
     fireEvent.change(screen.getByRole('textbox', { name: '메모' }), { target: { value: '전화 확인' } });
     expect(screen.getByRole('button', { name: '메모 저장하기' })).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: '메모 저장하기' }));
 
-    const afterMemo = JSON.parse(localStorage.getItem('non-game-market-insights:v2') ?? '[]');
+    const afterMemo = JSON.parse(localStorage.getItem(CASES_KEY) ?? '[]');
     expect(afterMemo[0].memos[0].text).toBe('전화 확인');
     expect(afterMemo[0].history.some((event: { type: string; payload?: { locale?: string } }) => event.type === 'memo_saved' && event.payload?.locale === 'ko')).toBe(true);
 
     fireEvent.click(screen.getAllByRole('button', { name: /완료하기/ })[0]);
-    const afterDone = JSON.parse(localStorage.getItem('non-game-market-insights:v2') ?? '[]');
+    const afterDone = JSON.parse(localStorage.getItem(CASES_KEY) ?? '[]');
     expect(afterDone[0].alerts.find((alert: { id: string }) => alert.id === 'pre_docs').status).toBe('done');
+  });
+
+  it('keeps memo text and deal titles out of the analytics queue', () => {
+    const dealTitle = '강남 비공개 거래';
+    const memoText = '임차인 전화 010-1234-5678';
+    render(<App />);
+
+    fireEvent.change(screen.getByRole('textbox', { name: '거래명' }), { target: { value: dealTitle } });
+    clickButtonByText('새 거래 시작');
+    fireEvent.click(screen.getByRole('button', { name: '+ 메모 추가' }));
+    fireEvent.change(screen.getByRole('textbox', { name: '메모' }), { target: { value: memoText } });
+    fireEvent.click(screen.getByRole('button', { name: '메모 저장하기' }));
+    fireEvent.click(screen.getByRole('button', { name: '메모' }));
+
+    const memoCard = screen.getByRole('region', { name: '단계별 메모' });
+    expect(within(memoCard).queryByRole('button', { name: '기타 메모 메모 삭제: 임차인 전화 010-1234-5678' })).not.toBeInTheDocument();
+    fireEvent.click(within(memoCard).getByRole('button', { name: '기타 메모 1번째 메모 삭제' }));
+
+    const analyticsQueue = localStorage.getItem(EVENTS_KEY) ?? '';
+    expect(analyticsQueue).not.toContain(dealTitle);
+    expect(analyticsQueue).not.toContain(memoText);
   });
 
   it('shows memo indicators on alert rows after saving an alert memo', () => {
@@ -295,7 +340,7 @@ describe('App broker checklist', () => {
     expect(within(savedMemoDropdown).getByText('등기부 갑구 확인')).toBeInTheDocument();
     expect(within(savedMemoDropdown).getByText('건축물대장 위반 여부 확인')).toBeInTheDocument();
 
-    fireEvent.click(within(savedMemoDropdown).getByRole('button', { name: '계약 전 서류 확인 메모 삭제: 등기부 갑구 확인' }));
+    fireEvent.click(within(savedMemoDropdown).getByRole('button', { name: '계약 전 서류 확인 1번째 메모 삭제' }));
 
     expect(screen.getByRole('button', { name: '계약 전 서류 확인 메모 1개 보기' })).toBeInTheDocument();
     expect(within(savedMemoDropdown).queryByText('등기부 갑구 확인')).not.toBeInTheDocument();
@@ -316,7 +361,7 @@ describe('App broker checklist', () => {
     const savedMemoDropdown = screen.getByRole('region', { name: '소유자 정보 확인 저장된 메모' });
     expect(within(savedMemoDropdown).getByText('소유권 이전 준비 확인')).toBeInTheDocument();
 
-    fireEvent.click(within(savedMemoDropdown).getByRole('button', { name: '소유자 정보 확인 메모 삭제: 소유권 이전 준비 확인' }));
+    fireEvent.click(within(savedMemoDropdown).getByRole('button', { name: '소유자 정보 확인 1번째 메모 삭제' }));
 
     expect(screen.queryByRole('button', { name: '소유자 정보 확인 메모 1개 보기' })).not.toBeInTheDocument();
     expect(screen.queryByText('소유권 이전 준비 확인')).not.toBeInTheDocument();
@@ -353,7 +398,7 @@ describe('App broker checklist', () => {
     fireEvent.click(within(memoCard).getByRole('button', { name: '메모 보기 범위: 기타 1개' }));
     expect(within(memoCard).getByText('거래 전체 기타 삭제 대상')).toBeInTheDocument();
 
-    fireEvent.click(within(memoCard).getByRole('button', { name: '기타 메모 메모 삭제: 거래 전체 기타 삭제 대상' }));
+    fireEvent.click(within(memoCard).getByRole('button', { name: '기타 메모 1번째 메모 삭제' }));
 
     expect(within(memoCard).queryByText('거래 전체 기타 삭제 대상')).not.toBeInTheDocument();
     expect(within(memoCard).getByRole('button', { name: '메모 보기 범위: 기타 0개' })).toBeInTheDocument();

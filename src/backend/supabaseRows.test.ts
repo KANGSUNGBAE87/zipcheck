@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { TEMPLATE } from '../domain';
-import { createBlankCase } from '../storage';
-import { caseToRow, alertToRow, memoToRow } from './supabaseRows';
+import { createBlankCase, createEvent } from '../storage';
+import { caseToRow, alertToRow, eventToRow, memoToRow } from './supabaseRows';
 
 describe('Supabase row mappers', () => {
   it('maps case, alert, and memo data to zipcheck_ table rows without raw provider identity', () => {
@@ -29,5 +29,27 @@ describe('Supabase row mappers', () => {
     expect(alertRow.alert_id).toBe(alert.id);
     expect(memoRow.text).toBe('임대인 통화 예정');
     expect(JSON.stringify({ caseRow, alertRow, memoRow })).not.toContain('userKey');
+  });
+
+  it('sanitizes analytics event payloads before mapping remote rows', () => {
+    const event = createEvent('memo_saved', {
+      caseId: 'case-1',
+      payload: {
+        locale: 'ko',
+        target: 'case',
+        memoText: '원격 저장되면 안 되는 메모',
+        caseTitle: '원격 저장되면 안 되는 거래명',
+        authorizationCode: 'remote-auth-code',
+        coreUserId: 'remote-core-user-id',
+      } as any,
+    });
+
+    const eventRow = eventToRow(event, 'auth-user-1');
+
+    expect(eventRow.payload).toEqual({ locale: 'ko', target: 'case' });
+    expect(JSON.stringify(eventRow)).not.toContain('원격 저장되면 안 되는 메모');
+    expect(JSON.stringify(eventRow)).not.toContain('원격 저장되면 안 되는 거래명');
+    expect(JSON.stringify(eventRow)).not.toContain('remote-auth-code');
+    expect(JSON.stringify(eventRow)).not.toContain('remote-core-user-id');
   });
 });

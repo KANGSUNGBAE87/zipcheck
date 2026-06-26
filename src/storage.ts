@@ -11,8 +11,23 @@ import {
   DEFAULT_TRANSACTION_TYPE,
 } from './domain';
 
-export const CASES_KEY = 'non-game-market-insights:v2';
-export const EVENTS_KEY = 'non-game-market-insights:events:v1';
+export const CASES_KEY = 'zipcheck:v2';
+export const EVENTS_KEY = 'zipcheck:events:v1';
+
+const LEGACY_CASES_KEY = 'non-game-market-insights:v2';
+const LEGACY_EVENTS_KEY = 'non-game-market-insights:events:v1';
+const SAFE_ANALYTICS_PAYLOAD_KEYS = new Set([
+  'locale',
+  'firstEntry',
+  'source',
+  'phaseKey',
+  'alertId',
+  'target',
+  'hasText',
+  'completedCount',
+  'linked',
+  'hasCoreUserId',
+]);
 
 export const createEvent = (type: HistoryEvent['type'], partial: Partial<HistoryEvent> = {}): HistoryEvent => ({
   id: crypto.randomUUID(),
@@ -70,8 +85,25 @@ export const normalizeCaseItem = (item: CaseItem): CaseItem => ({
   propertyType: normalizePropertyType((item as Partial<CaseItem>).propertyType),
 });
 
+const loadWithLegacyFallback = (key: string, legacyKey: string) => {
+  const current = localStorage.getItem(key);
+  if (current) return current;
+
+  const legacy = localStorage.getItem(legacyKey);
+  if (legacy) localStorage.setItem(key, legacy);
+  return legacy;
+};
+
+export const sanitizeAnalyticsEvent = (event: HistoryEvent): HistoryEvent => {
+  const payload: HistoryEvent['payload'] = {};
+  Object.entries(event.payload ?? {}).forEach(([key, value]) => {
+    if (SAFE_ANALYTICS_PAYLOAD_KEYS.has(key)) payload[key] = value;
+  });
+  return { ...event, payload };
+};
+
 export const loadCases = (): CaseItem[] => {
-  const raw = localStorage.getItem(CASES_KEY);
+  const raw = loadWithLegacyFallback(CASES_KEY, LEGACY_CASES_KEY);
   if (!raw) return [];
   try { return (JSON.parse(raw) as CaseItem[]).map(normalizeCaseItem); } catch { return []; }
 };
@@ -79,12 +111,16 @@ export const loadCases = (): CaseItem[] => {
 export const saveCases = (cases: CaseItem[]) => localStorage.setItem(CASES_KEY, JSON.stringify(cases));
 
 export const loadAnalyticsQueue = (): HistoryEvent[] => {
-  const raw = localStorage.getItem(EVENTS_KEY);
+  const raw = loadWithLegacyFallback(EVENTS_KEY, LEGACY_EVENTS_KEY);
   if (!raw) return [];
-  try { return JSON.parse(raw) as HistoryEvent[]; } catch { return []; }
+  try {
+    const events = (JSON.parse(raw) as HistoryEvent[]).map(sanitizeAnalyticsEvent);
+    saveAnalyticsQueue(events);
+    return events;
+  } catch { return []; }
 };
 
-export const saveAnalyticsQueue = (events: HistoryEvent[]) => localStorage.setItem(EVENTS_KEY, JSON.stringify(events));
+export const saveAnalyticsQueue = (events: HistoryEvent[]) => localStorage.setItem(EVENTS_KEY, JSON.stringify(events.map(sanitizeAnalyticsEvent)));
 
 export const appendAnalyticsEvent = (event: HistoryEvent) => {
   const next = [...loadAnalyticsQueue(), event];

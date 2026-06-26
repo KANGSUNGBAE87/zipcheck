@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { TEMPLATE } from '../domain';
-import { createBlankCase, createEvent } from '../storage';
+import { CASES_KEY, createBlankCase, createEvent } from '../storage';
 import { LocalStorageCaseRepository } from './localStorageCaseRepository';
 
 describe('LocalStorageCaseRepository', () => {
@@ -18,7 +18,7 @@ describe('LocalStorageCaseRepository', () => {
 
     expect(await repository.loadCases()).toEqual([item]);
     expect(await repository.loadAnalyticsQueue()).toEqual([event]);
-    expect(localStorage.getItem('non-game-market-insights:v2')).toContain('로컬 거래');
+    expect(localStorage.getItem(CASES_KEY)).toContain('로컬 거래');
   });
 
   it('persists memo deletion in the local fallback repository', async () => {

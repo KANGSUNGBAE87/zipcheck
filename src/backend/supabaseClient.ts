@@ -7,6 +7,8 @@ export type SupabasePublicConfig = {
   anonKey: string;
 };
 
+const browserSupabaseClients = new Map<string, SupabaseClient>();
+
 export const resolveSupabaseConfig = (env: SupabaseEnv = import.meta.env): SupabasePublicConfig | null => {
   if (env.MODE === 'test' && env.VITE_ENABLE_REMOTE_SUPABASE_IN_TESTS !== 'true') return null;
   const url = typeof env.VITE_SUPABASE_URL === 'string' ? env.VITE_SUPABASE_URL.trim() : '';
@@ -18,12 +20,17 @@ export const resolveSupabaseConfig = (env: SupabaseEnv = import.meta.env): Supab
 export const createBrowserSupabaseClient = (env?: SupabaseEnv): SupabaseClient | null => {
   const config = resolveSupabaseConfig(env ?? import.meta.env);
   if (!config) return null;
+  const cacheKey = `${config.url}::${config.anonKey}`;
+  const cached = browserSupabaseClients.get(cacheKey);
+  if (cached) return cached;
 
-  return createClient(config.url, config.anonKey, {
+  const client = createClient(config.url, config.anonKey, {
     auth: {
       autoRefreshToken: true,
       detectSessionInUrl: false,
       persistSession: true,
     },
   });
+  browserSupabaseClients.set(cacheKey, client);
+  return client;
 };
