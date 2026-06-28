@@ -2547,6 +2547,21 @@ textarea {
     justify-content: flex-start;
   }
 
+  .row-memo-tools {
+    width: 100%;
+    justify-content: flex-start;
+  }
+
+  .row-memo-tools .memo-review {
+    position: static;
+  }
+
+  .memo-review-panel {
+    left: 0;
+    right: auto;
+    width: min(280px, 100%);
+  }
+
   .focus-card {
     grid-template-columns: 44px minmax(0, 1fr);
   }
