@@ -9,6 +9,11 @@ const clickButtonByText = (text: string) => {
   expect(button).toBeTruthy();
   fireEvent.click(button!);
 };
+const chooseMemoTarget = (name: string) => {
+  const sheet = screen.getByRole('dialog', { name: '메모' });
+  fireEvent.click(within(sheet).getByRole('button', { name: /메모 대상:/ }));
+  fireEvent.click(within(sheet).getByRole('option', { name }));
+};
 
 afterEach(() => cleanup());
 
@@ -316,7 +321,7 @@ describe('App broker checklist', () => {
     fireEvent.change(screen.getByRole('textbox', { name: '거래명' }), { target: { value: '메모 인디케이터 검증' } });
     clickButtonByText('새 거래 시작');
     fireEvent.click(screen.getByRole('button', { name: '+ 메모 추가' }));
-    fireEvent.change(screen.getByRole('combobox', { name: '메모 대상' }), { target: { value: 'pre_docs' } });
+    chooseMemoTarget('계약 전 서류 확인 계약 전');
     fireEvent.change(screen.getByRole('textbox', { name: '메모' }), { target: { value: '등기부 확인 위치' } });
     fireEvent.click(screen.getByRole('button', { name: '메모 저장하기' }));
 
@@ -397,7 +402,7 @@ describe('App broker checklist', () => {
     fireEvent.click(screen.getByRole('button', { name: '메모 저장하기' }));
 
     fireEvent.click(screen.getByRole('button', { name: '+ 메모 추가' }));
-    fireEvent.change(screen.getByRole('combobox', { name: '메모 대상' }), { target: { value: 'case' } });
+    chooseMemoTarget('기타 메모 기타');
     fireEvent.change(screen.getByRole('textbox', { name: '메모' }), { target: { value: '거래 전체 기타 삭제 대상' } });
     fireEvent.click(screen.getByRole('button', { name: '메모 저장하기' }));
 
@@ -542,7 +547,7 @@ describe('App broker checklist', () => {
     const sheet = screen.getByRole('dialog', { name: '메모' });
     expect(within(sheet).getByText('메모 위치')).toBeInTheDocument();
     expect(within(sheet).getByText('메모 연결 거래')).toBeInTheDocument();
-    expect(within(sheet).getByText('계약 전')).toBeInTheDocument();
+    expect(within(sheet).getAllByText('계약 전').length).toBeGreaterThan(0);
     expect(within(sheet).getAllByText('소유자 정보 확인').length).toBeGreaterThan(0);
 
     fireEvent.change(screen.getByRole('textbox', { name: '메모' }), { target: { value: '소유자 통화 후 위임장 확인' } });
@@ -558,6 +563,75 @@ describe('App broker checklist', () => {
     expect(within(memoCard).getByText('소유자 통화 후 위임장 확인')).toBeInTheDocument();
   });
 
+  it('uses a styled memo target menu instead of the native browser select', () => {
+    render(<App />);
+
+    fireEvent.change(screen.getByRole('textbox', { name: '거래명' }), { target: { value: '메모 대상 메뉴 거래' } });
+    clickButtonByText('새 거래 시작');
+    fireEvent.click(screen.getByRole('button', { name: '+ 메모 추가' }));
+
+    const sheet = screen.getByRole('dialog', { name: '메모' });
+    expect(within(sheet).queryByRole('combobox', { name: '메모 대상' })).not.toBeInTheDocument();
+
+    const targetButton = within(sheet).getByRole('button', { name: '메모 대상: 기타 메모' });
+    expect(targetButton).toHaveClass('memo-target-current');
+
+    fireEvent.click(targetButton);
+    fireEvent.keyDown(targetButton, { key: 'ArrowDown' });
+    const targetMenu = within(sheet).getByRole('listbox', { name: '메모 대상 선택' });
+    expect(within(targetMenu).getByRole('option', { name: '기타 메모 기타' })).toHaveAttribute('aria-selected', 'true');
+    expect(within(targetMenu).getByRole('option', { name: '소유자 정보 확인 계약 전' })).toHaveAttribute('aria-selected', 'false');
+
+    fireEvent.keyDown(within(targetMenu).getByRole('option', { name: '소유자 정보 확인 계약 전' }), { key: 'Enter' });
+    expect(within(sheet).getByRole('button', { name: '메모 대상: 소유자 정보 확인' })).toBeInTheDocument();
+    expect(within(sheet).getAllByText('계약 전').length).toBeGreaterThan(0);
+  });
+
+  it('closes the styled memo target menu when the memo sheet closes or saves', () => {
+    render(<App />);
+
+    fireEvent.change(screen.getByRole('textbox', { name: '거래명' }), { target: { value: '메모 메뉴 닫힘 검증' } });
+    clickButtonByText('새 거래 시작');
+    fireEvent.click(screen.getByRole('button', { name: '+ 메모 추가' }));
+
+    const openTargetMenu = () => {
+      const sheet = screen.getByRole('dialog', { name: '메모' });
+      fireEvent.click(within(sheet).getByRole('button', { name: /메모 대상:/ }));
+      expect(within(sheet).getByRole('listbox', { name: '메모 대상 선택' })).toBeInTheDocument();
+      return sheet;
+    };
+
+    let sheet = openTargetMenu();
+    fireEvent.click(within(sheet).getAllByRole('button', { name: '닫기' })[0]);
+    expect(screen.queryByRole('listbox', { name: '메모 대상 선택' })).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: '+ 메모 추가' }));
+    sheet = openTargetMenu();
+    fireEvent.click(within(sheet).getAllByRole('button', { name: '닫기' })[1]);
+    expect(screen.queryByRole('listbox', { name: '메모 대상 선택' })).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: '+ 메모 추가' }));
+    sheet = openTargetMenu();
+    fireEvent.change(within(sheet).getByRole('textbox', { name: '메모' }), { target: { value: '저장 후 메뉴 정리' } });
+    fireEvent.click(within(sheet).getByRole('button', { name: '메모 저장하기' }));
+    expect(screen.queryByRole('listbox', { name: '메모 대상 선택' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('dialog', { name: '메모' })).not.toBeInTheDocument();
+
+    fireEvent.change(screen.getByRole('textbox', { name: '거래명' }), { target: { value: '메모 메뉴 전환 검증' } });
+    clickButtonByText('새 거래 시작');
+    fireEvent.click(screen.getByRole('button', { name: '+ 메모 추가' }));
+    sheet = openTargetMenu();
+    fireEvent.click(screen.getByRole('button', { name: /메모 메뉴 닫힘 검증/ }));
+    expect(screen.queryByRole('listbox', { name: '메모 대상 선택' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('dialog', { name: '메모' })).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: '+ 메모 추가' }));
+    sheet = openTargetMenu();
+    fireEvent.click(screen.getByRole('button', { name: '거래' }));
+    expect(screen.queryByRole('listbox', { name: '메모 대상 선택' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('dialog', { name: '메모' })).not.toBeInTheDocument();
+  });
+
   it('sorts all memos by checklist order and filters 기타 memos separately', () => {
     render(<App />);
 
@@ -565,8 +639,13 @@ describe('App broker checklist', () => {
     clickButtonByText('새 거래 시작');
 
     const saveMemoForTarget = (target: string, text: string) => {
+      const targetNames: Record<string, string> = {
+        case: '기타 메모 기타',
+        contract_copy: '계약서 사본 확보 계약 당일',
+        pre_owner: '소유자 정보 확인 계약 전',
+      };
       fireEvent.click(screen.getByRole('button', { name: '+ 메모 추가' }));
-      fireEvent.change(screen.getByRole('combobox', { name: '메모 대상' }), { target: { value: target } });
+      chooseMemoTarget(targetNames[target]);
       fireEvent.change(screen.getByRole('textbox', { name: '메모' }), { target: { value: text } });
       fireEvent.click(screen.getByRole('button', { name: '메모 저장하기' }));
     };

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react';
 import { copy, t } from './i18n';
 import { TEMPLATE, type AlertItem, type CaseItem, type HistoryEvent, type Locale, type Memo, type PhaseKey, type PropertyType, type TransactionType } from './domain';
 import { PROPERTY_OPTIONS, TRANSACTION_OPTIONS, guideTierLabel, propertyLabel, resolveGuide, resolveGuideBranches, resolveGuideSources, transactionLabel } from './guides';
@@ -196,8 +196,10 @@ function App() {
   const [viewPhaseKey, setViewPhaseKey] = useState<PhaseKey | 'all' | null>(null);
   const [memoFilter, setMemoFilter] = useState<MemoFilterKey>('all');
   const [memoFilterMenuOpen, setMemoFilterMenuOpen] = useState(false);
+  const [memoTargetMenuOpen, setMemoTargetMenuOpen] = useState(false);
   const [openMemoDropdownId, setOpenMemoDropdownId] = useState<string | null>(null);
   const [dealFolderOpen, setDealFolderOpen] = useState({ active: true, completed: true });
+  const memoTargetOptionRefs = useRef<Record<string, HTMLButtonElement | null>>({});
 
   useEffect(() => {
     const handleResize = () => {
@@ -277,6 +279,7 @@ function App() {
     setGuideTargetId(null);
     setMemoFilter('all');
     setMemoFilterMenuOpen(false);
+    setMemoTargetMenuOpen(false);
     setOpenMemoDropdownId(null);
     setDraftMemo('');
   }, [mobileTab]);
@@ -292,6 +295,64 @@ function App() {
     : null;
   const selectedGuide = selectedGuideAlert ? resolveGuide(selectedGuideAlert.id) : null;
   const selectedMemoContext = selected ? resolveMemoTargetContext(locale, selected, memoTarget) : null;
+  const memoTargetOptions = selected ? [
+    { id: 'case', label: copy[locale].memo_target_case, phaseLabel: copy[locale].memo_misc },
+    ...selected.alerts.map((alert) => ({
+      id: alert.id,
+      label: t(locale, alert.titleKey),
+      phaseLabel: t(locale, `phase.${alert.phaseKey}`),
+    })),
+  ] : [];
+  const selectedMemoTargetOption = memoTargetOptions.find((option) => option.id === memoTarget) ?? memoTargetOptions[0] ?? null;
+  const focusMemoTargetOption = (optionId: string) => {
+    window.setTimeout(() => memoTargetOptionRefs.current[optionId]?.focus(), 0);
+  };
+  const openMemoTargetMenu = (focusId = memoTarget) => {
+    setMemoTargetMenuOpen(true);
+    focusMemoTargetOption(focusId);
+  };
+  const selectMemoTarget = (targetId: string) => {
+    setMemoTarget(targetId);
+    setMemoTargetMenuOpen(false);
+  };
+  const moveMemoTargetFocus = (currentId: string, direction: 1 | -1) => {
+    const currentIndex = memoTargetOptions.findIndex((option) => option.id === currentId);
+    if (currentIndex < 0 || memoTargetOptions.length === 0) return;
+    const nextIndex = (currentIndex + direction + memoTargetOptions.length) % memoTargetOptions.length;
+    focusMemoTargetOption(memoTargetOptions[nextIndex].id);
+  };
+  const handleMemoTargetButtonKeyDown = (event: KeyboardEvent<HTMLButtonElement>) => {
+    if (!memoTargetOptions.length) return;
+    if (event.key === 'ArrowDown' || event.key === 'Enter' || event.key === ' ') {
+      event.preventDefault();
+      openMemoTargetMenu(memoTarget);
+    }
+    if (event.key === 'ArrowUp') {
+      event.preventDefault();
+      openMemoTargetMenu(memoTargetOptions[memoTargetOptions.length - 1].id);
+    }
+  };
+  const handleMemoTargetOptionKeyDown = (event: KeyboardEvent<HTMLButtonElement>, optionId: string) => {
+    if (event.key === 'ArrowDown') {
+      event.preventDefault();
+      moveMemoTargetFocus(optionId, 1);
+    } else if (event.key === 'ArrowUp') {
+      event.preventDefault();
+      moveMemoTargetFocus(optionId, -1);
+    } else if (event.key === 'Home') {
+      event.preventDefault();
+      focusMemoTargetOption(memoTargetOptions[0]?.id ?? optionId);
+    } else if (event.key === 'End') {
+      event.preventDefault();
+      focusMemoTargetOption(memoTargetOptions[memoTargetOptions.length - 1]?.id ?? optionId);
+    } else if (event.key === 'Escape') {
+      event.preventDefault();
+      setMemoTargetMenuOpen(false);
+    } else if (event.key === 'Enter' || event.key === ' ') {
+      event.preventDefault();
+      selectMemoTarget(optionId);
+    }
+  };
   const memoViewItems = selected ? selected.memos.map((memo) => resolveMemoViewItem(locale, selected, memo)).sort(compareMemoViewItems) : [];
   const memoFilterOptions = selected ? [
     { key: 'all' as const, label: copy[locale].memo_all, count: memoViewItems.length },
@@ -338,6 +399,7 @@ function App() {
     setViewPhaseKey(null);
     setMemoFilter('all');
     setMemoFilterMenuOpen(false);
+    setMemoTargetMenuOpen(false);
     setOpenMemoDropdownId(null);
     setMobileTab('checklist');
     mutate((list) => list.map((item) => item.id === caseId
@@ -359,6 +421,7 @@ function App() {
     setMemoTarget('case');
     setMemoFilter('all');
     setMemoFilterMenuOpen(false);
+    setMemoTargetMenuOpen(false);
     setOpenMemoDropdownId(null);
     setSheetOpen(false);
     setMobileTab('checklist');
@@ -425,6 +488,7 @@ function App() {
     setSheetOpen(false);
     setMemoFilter(savedMemoFilter);
     setMemoFilterMenuOpen(false);
+    setMemoTargetMenuOpen(false);
     setOpenMemoDropdownId(null);
   };
 
@@ -502,6 +566,7 @@ function App() {
       setViewPhaseKey(null);
       setMemoFilter('all');
       setMemoFilterMenuOpen(false);
+      setMemoTargetMenuOpen(false);
       setOpenMemoDropdownId(null);
       setTossLoginState('idle');
       setRepositoryStatus(repository.getStatus());
@@ -558,6 +623,7 @@ function App() {
     setGuideTargetId(null);
     setOpenMemoDropdownId(null);
     setMemoFilterMenuOpen(false);
+    setMemoTargetMenuOpen(false);
     setDraftMemo('');
     setSheetOpen(true);
     setMobileTab('memo');
@@ -1028,17 +1094,67 @@ function App() {
                     <div className="sheet-header">
                       <div className="sheet-heading">
                         {referenceSheetOpen ? <span className="reference-badge">{copy[locale].reference_only_label}</span> : null}
-                        <label>
-                          {referenceSheetOpen && selectedMemoAlert ? t(locale, selectedMemoAlert.titleKey) : copy[locale].memo}
-                          {referenceSheetOpen ? null : (
-                            <select aria-label={copy[locale].memo_target_label} value={memoTarget} onChange={(e) => setMemoTarget(e.target.value)}>
-                              <option value="case">{copy[locale].memo_target_case}</option>
-                              {selected.alerts.map((alert) => <option key={alert.id} value={alert.id}>{t(locale, alert.titleKey)}</option>)}
-                            </select>
-                          )}
-                        </label>
+                        <div className="memo-target-field">
+                          <span className="memo-target-heading">
+                            {referenceSheetOpen && selectedMemoAlert ? t(locale, selectedMemoAlert.titleKey) : copy[locale].memo}
+                          </span>
+                          {!referenceSheetOpen && selectedMemoTargetOption ? (
+                            <div className={`memo-target-dropdown ${memoTargetMenuOpen ? 'open' : ''}`}>
+                              <button
+                                type="button"
+                                className="memo-target-current"
+                                aria-label={`${copy[locale].memo_target_label}: ${selectedMemoTargetOption.label}`}
+                                aria-haspopup="listbox"
+                                aria-controls={memoTargetMenuOpen ? 'memo-target-listbox' : undefined}
+                                aria-expanded={memoTargetMenuOpen}
+                                onKeyDown={handleMemoTargetButtonKeyDown}
+                                onClick={() => setMemoTargetMenuOpen((open) => !open)}
+                              >
+                                <span>{copy[locale].memo_target_label}</span>
+                                <strong>{selectedMemoTargetOption.label}</strong>
+                                <em>{selectedMemoTargetOption.phaseLabel}</em>
+                                <b aria-hidden="true">⌄</b>
+                              </button>
+                              {memoTargetMenuOpen ? (
+                                <div id="memo-target-listbox" className="memo-target-menu" role="listbox" aria-label={copy[locale].memo_target_menu_label}>
+                                  {memoTargetOptions.map((option) => (
+                                    <button
+                                      key={option.id}
+                                      ref={(node) => {
+                                        memoTargetOptionRefs.current[option.id] = node;
+                                      }}
+                                      type="button"
+                                      role="option"
+                                      aria-selected={memoTarget === option.id}
+                                      className={memoTarget === option.id ? 'active' : ''}
+                                      onKeyDown={(event) => handleMemoTargetOptionKeyDown(event, option.id)}
+                                      onClick={() => {
+                                        selectMemoTarget(option.id);
+                                      }}
+                                    >
+                                      <span>
+                                        <strong>{option.label}</strong>
+                                        <em>{option.phaseLabel}</em>
+                                      </span>
+                                      {memoTarget === option.id ? <b aria-hidden="true">✓</b> : null}
+                                    </button>
+                                  ))}
+                                </div>
+                              ) : null}
+                            </div>
+                          ) : null}
+                        </div>
                       </div>
-                      <button className="icon-btn dismiss" aria-label={copy[locale].memo_close} onClick={() => setSheetOpen(false)}>×</button>
+                      <button
+                        className="icon-btn dismiss"
+                        aria-label={copy[locale].memo_close}
+                        onClick={() => {
+                          setMemoTargetMenuOpen(false);
+                          setSheetOpen(false);
+                        }}
+                      >
+                        ×
+                      </button>
                     </div>
                     <div className="sheet-body">
                       {selectedMemoContext ? (
@@ -1063,7 +1179,15 @@ function App() {
                     </div>
                     <div className="sheet-actions">
                       <button type="button" className="primary-btn memo-save-btn" onClick={saveMemo} disabled={!draftMemo.trim()}>{copy[locale].memo_save}</button>
-                      <button className="outline-btn" onClick={() => setSheetOpen(false)}>{copy[locale].memo_close}</button>
+                      <button
+                        className="outline-btn"
+                        onClick={() => {
+                          setMemoTargetMenuOpen(false);
+                          setSheetOpen(false);
+                        }}
+                      >
+                        {copy[locale].memo_close}
+                      </button>
                     </div>
                   </section>
                 ) : null}
