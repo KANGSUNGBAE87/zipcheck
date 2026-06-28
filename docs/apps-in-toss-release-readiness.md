@@ -76,7 +76,7 @@ Do not upload or request review until all of these are true:
 - `docs/privacy-and-data-retention.md`
 - `docs/supabase-toss-setup.md`
 - `supabase/functions/zipcheck-toss-login/index.ts`
-- `test.md`
+- local control files such as `test.md` and `platform.md` when available in the project workspace
 
 Official references:
 

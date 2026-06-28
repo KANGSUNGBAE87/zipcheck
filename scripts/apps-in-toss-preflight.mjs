@@ -11,8 +11,6 @@ const requiredFiles = [
   'docs/privacy-and-data-retention.md',
   'docs/supabase-toss-setup.md',
   'granite.config.ts',
-  'platform.md',
-  'test.md',
   'supabase/functions/zipcheck-toss-login/index.ts',
 ];
 
