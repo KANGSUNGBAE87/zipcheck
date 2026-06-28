@@ -843,7 +843,6 @@ textarea {
 .phase-chip,
 .kicker,
 .status,
-.row-tag,
 .reference-badge {
   display: inline-flex;
   align-items: center;
@@ -862,15 +861,12 @@ textarea {
   color: var(--brand);
 }
 
-.status,
-.row-tag.warn {
+.status {
   background: var(--warning-bg);
   color: var(--warning);
 }
 
-.status.green,
-.row-tag,
-.row-tag.done {
+.status.green {
   background: var(--success-bg);
   color: var(--success);
 }
@@ -1257,8 +1253,8 @@ textarea {
 .alert-row,
 .check-row {
   display: grid;
-  grid-template-columns: 44px minmax(0, 1fr) auto;
-  align-items: center;
+  grid-template-columns: 56px minmax(0, 1fr);
+  align-items: start;
   gap: 14px;
   padding: 14px;
   margin-top: 10px;
@@ -1293,18 +1289,18 @@ textarea {
 .ref-icon {
   display: grid;
   place-items: center;
-  width: 44px;
-  min-width: 44px;
-  height: 44px;
   padding: 0;
-  border-radius: 14px;
-  font-size: 1rem;
 }
 
 .check {
+  width: 53px;
+  min-width: 53px;
+  height: 53px;
   border-color: #b9c9cd;
+  border-radius: 16px;
   background: #fff;
   color: var(--brand);
+  font-size: 1.2rem;
 }
 
 .check.done {
@@ -1314,9 +1310,14 @@ textarea {
 }
 
 .ref-icon {
+  width: 44px;
+  min-width: 44px;
+  height: 44px;
   border: 1px solid var(--reference-border);
+  border-radius: 14px;
   background: var(--reference);
   color: #7c6237;
+  font-size: 1rem;
   font-weight: 900;
 }
 
@@ -1338,11 +1339,22 @@ textarea {
 }
 
 .row-actions {
+  display: grid;
+  grid-column: 2 / -1;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.row-primary-actions {
   display: flex;
   align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  min-width: 0;
+}
+
+.row-primary-actions.reference {
   justify-content: flex-end;
-  gap: 8px;
-  flex-wrap: wrap;
 }
 
 .alert-actions > button,
@@ -1362,7 +1374,9 @@ textarea {
   position: relative;
   display: inline-flex;
   align-items: center;
-  justify-content: flex-end;
+  justify-content: flex-start;
+  width: 100%;
+  min-width: 0;
   gap: 8px;
   flex-wrap: wrap;
 }
@@ -1405,7 +1419,7 @@ textarea {
 .memo-review-panel {
   position: absolute;
   top: calc(100% + 8px);
-  right: 0;
+  left: 0;
   z-index: 12;
   width: min(280px, calc(100vw - 48px));
   padding: 10px;
@@ -1458,15 +1472,26 @@ textarea {
 }
 
 .memo-add-icon {
-  display: inline-grid;
-  place-items: center;
-  width: 42px;
-  min-width: 42px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 6px;
+  width: auto;
+  min-width: 82px;
   height: 42px;
-  padding: 0;
+  padding: 0 0.72rem;
   border-radius: 14px;
-  font-size: 1.15rem;
+  font-size: 0.84rem;
   font-weight: 950;
+}
+
+.memo-add-label {
+  line-height: 1;
+}
+
+.memo-add-plus {
+  font-size: 1.08rem;
+  line-height: 1;
 }
 
 .memo-review-toggle:hover:not(:disabled),
@@ -1476,8 +1501,10 @@ textarea {
   background: #fff0d6;
 }
 
-.detail-toggle {
-  margin-top: 8px;
+.row-guide-action {
+  flex: 0 1 auto;
+  margin-top: 0;
+  margin-left: auto;
 }
 
 .guide-action {
@@ -2662,7 +2689,7 @@ textarea {
 
   .alert-row,
   .check-row {
-    grid-template-columns: 44px minmax(0, 1fr);
+    grid-template-columns: 56px minmax(0, 1fr);
     align-items: start;
   }
 
@@ -2671,8 +2698,7 @@ textarea {
   }
 
   .row-actions {
-    grid-column: 1 / -1;
-    justify-content: flex-start;
+    grid-column: 2 / -1;
   }
 
   .row-memo-tools {

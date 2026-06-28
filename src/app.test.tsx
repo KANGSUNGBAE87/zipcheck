@@ -211,7 +211,14 @@ describe('App broker checklist', () => {
     const stored = JSON.parse(localStorage.getItem(CASES_KEY) ?? '[]');
     expect(stored).toHaveLength(1);
     expect(stored[0].history.some((event: { type: string; payload?: { firstEntry?: boolean; locale?: string } }) => event.type === 'session_start' && event.payload?.firstEntry && event.payload?.locale === 'ko')).toBe(true);
-    expect(screen.getAllByText(/지금 확인할 항목/).length).toBeGreaterThan(0);
+    expect(screen.getByText('지금 확인할 항목 · 12개 남음')).toBeInTheDocument();
+    const firstChecklistRow = screen.getByRole('button', { name: '계약 전 서류 확인 메모 추가' }).closest('.check-row') as HTMLElement;
+    expect(firstChecklistRow).toBeTruthy();
+    expect(within(firstChecklistRow).queryByText('지금 확인할 항목')).not.toBeInTheDocument();
+    const rowActions = firstChecklistRow.querySelector('.row-actions') as HTMLElement;
+    expect(rowActions).toBeTruthy();
+    expect(within(rowActions).getByRole('button', { name: '계약 전 서류 확인 메모 추가' })).toHaveTextContent('메모+');
+    expect(within(rowActions).getByRole('button', { name: '계약 전 서류 확인 가이드 보기' })).toBeInTheDocument();
     expect(screen.getAllByText('로그인하지 않아도 저장됩니다. Supabase 저장 환경이면 익명 세션으로 원격 저장되고, 없으면 이 기기에 보관합니다.')[0]).toBeInTheDocument();
     expect(screen.queryByText('Back')).not.toBeInTheDocument();
     const analytics = JSON.parse(localStorage.getItem(EVENTS_KEY) ?? '[]');
@@ -344,8 +351,14 @@ describe('App broker checklist', () => {
     saveFirstRowMemo('등기부 갑구 확인');
     saveFirstRowMemo('건축물대장 위반 여부 확인');
 
-    expect(screen.getByRole('button', { name: '계약 전 서류 확인 메모 추가' })).toHaveTextContent('+');
-    expect(screen.getByRole('button', { name: '계약 전 서류 확인 메모 2개 보기' })).toHaveTextContent('메모 2개 보기');
+    const firstChecklistRow = screen.getByRole('button', { name: '계약 전 서류 확인 메모 추가' }).closest('.check-row') as HTMLElement;
+    expect(firstChecklistRow).toBeTruthy();
+    const actionRows = Array.from((firstChecklistRow.querySelector('.row-actions') as HTMLElement).children);
+    expect(actionRows[0]).toHaveClass('row-primary-actions');
+    expect(actionRows[1]).toHaveClass('row-memo-tools');
+    expect(within(actionRows[0] as HTMLElement).getByRole('button', { name: '계약 전 서류 확인 메모 추가' })).toHaveTextContent('메모+');
+    expect(within(actionRows[0] as HTMLElement).getByRole('button', { name: '계약 전 서류 확인 가이드 보기' })).toBeInTheDocument();
+    expect(within(actionRows[1] as HTMLElement).getByRole('button', { name: '계약 전 서류 확인 메모 2개 보기' })).toHaveTextContent('메모 2개 보기');
 
     fireEvent.click(screen.getByRole('button', { name: '계약 전 서류 확인 메모 2개 보기' }));
 

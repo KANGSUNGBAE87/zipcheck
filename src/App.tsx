@@ -709,6 +709,7 @@ function App() {
     const actionableMemoLabel = `${alertTitle} ${copy[locale].memo_add_row}`;
     const memoReviewLabel = `${alertTitle} ${copy[locale].memo} ${formatCount(locale, memoCount)} ${copy[locale].memo_view}`;
     const memoDropdownOpen = openMemoDropdownId === alert.id;
+    const guideActionLabel = alert.status === 'reference' ? copy[locale].reference_view_label : copy[locale].detail_view;
     return (
       <div key={alert.id} className={`check-row ${alert.status} ${alert.status === 'done' ? 'completed' : ''}`}>
         {alert.status === 'reference' ? (
@@ -725,73 +726,71 @@ function App() {
         <div className="check-copy">
           <h4>{alertTitle}</h4>
           <p>{guide.summary}</p>
-          <button
-            type="button"
-            className={`guide-action detail-toggle ${guideBranchParts.length > 0 ? 'is-tailored' : ''}`}
-            onClick={() => openGuide(alert)}
-            aria-label={`${alertTitle} ${copy[locale].detail_view}`}
-          >
-            <span className="guide-action-main">
-              <span className="guide-action-icon" aria-hidden="true">?</span>
-              <span>{copy[locale].detail_view}</span>
-            </span>
-            <span className="guide-action-meta">{guideMetaLabel}</span>
-          </button>
         </div>
         <div className="row-actions">
-          {alert.status !== 'reference' ? (
-            <div className="row-memo-tools">
-              {memoCount > 0 ? (
-                <div className={`memo-review ${memoDropdownOpen ? 'open' : ''}`}>
-                  <button
-                    type="button"
-                    className="memo-review-toggle"
-                    aria-label={memoReviewLabel}
-                    aria-expanded={memoDropdownOpen}
-                    onClick={() => setOpenMemoDropdownId((current) => (current === alert.id ? null : alert.id))}
-                  >
-                    <span>{copy[locale].memo} {formatCount(locale, memoCount)} {copy[locale].memo_view}</span>
-                    <b aria-hidden="true">⌄</b>
-                  </button>
-                  {memoDropdownOpen ? (
-                    <div className="memo-review-panel" role="region" aria-label={`${alertTitle} ${copy[locale].memo_saved_list}`}>
-                      <ol>
-                        {linkedMemos.map((memo, memoIndex) => (
-                          <li key={memo.memoId}>
-                            <div className="memo-review-meta">
-                              <time>{memoTimeLabel(memo.createdAt)}</time>
-                              <button
-                                type="button"
-                                className="memo-delete-btn"
-                                aria-label={memoDeleteLabel(locale, alertTitle, memoIndex + 1)}
-                                onClick={() => deleteMemo(memo.memoId)}
-                              >
-                                {copy[locale].memo_delete}
-                              </button>
-                            </div>
-                            <p>{memo.text}</p>
-                          </li>
-                        ))}
-                      </ol>
-                    </div>
-                  ) : null}
-                </div>
-              ) : null}
+          <div className={`row-primary-actions ${alert.status === 'reference' ? 'reference' : ''}`}>
+            {alert.status !== 'reference' ? (
               <button
                 type="button"
                 className="memo-add-icon"
                 aria-label={actionableMemoLabel}
                 onClick={() => openMemoComposer(alert.id)}
               >
-                <span aria-hidden="true">+</span>
+                <span className="memo-add-label">{copy[locale].memo}</span>
+                <span className="memo-add-plus" aria-hidden="true">+</span>
               </button>
+            ) : null}
+            <button
+              type="button"
+              className={`guide-action row-guide-action ${guideBranchParts.length > 0 ? 'is-tailored' : ''}`}
+              onClick={() => (alert.status === 'reference' ? openReference(alert) : openGuide(alert))}
+              aria-label={`${alertTitle} ${guideActionLabel}`}
+            >
+              <span className="guide-action-main">
+                <span className="guide-action-icon" aria-hidden="true">?</span>
+                <span>{guideActionLabel}</span>
+              </span>
+              <span className="guide-action-meta">{guideMetaLabel}</span>
+            </button>
+          </div>
+          {alert.status !== 'reference' && memoCount > 0 ? (
+            <div className="row-memo-tools">
+              <div className={`memo-review ${memoDropdownOpen ? 'open' : ''}`}>
+                <button
+                  type="button"
+                  className="memo-review-toggle"
+                  aria-label={memoReviewLabel}
+                  aria-expanded={memoDropdownOpen}
+                  onClick={() => setOpenMemoDropdownId((current) => (current === alert.id ? null : alert.id))}
+                >
+                  <span>{copy[locale].memo} {formatCount(locale, memoCount)} {copy[locale].memo_view}</span>
+                  <b aria-hidden="true">⌄</b>
+                </button>
+                {memoDropdownOpen ? (
+                  <div className="memo-review-panel" role="region" aria-label={`${alertTitle} ${copy[locale].memo_saved_list}`}>
+                    <ol>
+                      {linkedMemos.map((memo, memoIndex) => (
+                        <li key={memo.memoId}>
+                          <div className="memo-review-meta">
+                            <time>{memoTimeLabel(memo.createdAt)}</time>
+                            <button
+                              type="button"
+                              className="memo-delete-btn"
+                              aria-label={memoDeleteLabel(locale, alertTitle, memoIndex + 1)}
+                              onClick={() => deleteMemo(memo.memoId)}
+                            >
+                              {copy[locale].memo_delete}
+                            </button>
+                          </div>
+                          <p>{memo.text}</p>
+                        </li>
+                      ))}
+                    </ol>
+                  </div>
+                ) : null}
+              </div>
             </div>
           ) : null}
-          {alert.status === 'reference' ? (
-            <button type="button" className="soft-btn" aria-label={`${alertTitle} ${copy[locale].reference_view_label}`} onClick={() => openReference(alert)}>
-              {copy[locale].reference_view_label}
-            </button>
-          ) : <span className={`row-tag ${alert.status === 'pending' ? 'warn' : ''}`}>{alert.status === 'done' ? copy[locale].completed : copy[locale].focus_caption}</span>}
         </div>
       </div>
     );
