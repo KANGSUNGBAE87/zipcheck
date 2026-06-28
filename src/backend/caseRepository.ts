@@ -15,4 +15,5 @@ export interface CaseRepository {
   saveCases(cases: CaseItem[]): Promise<void>;
   loadAnalyticsQueue(): Promise<HistoryEvent[]>;
   appendAnalyticsEvent(event: HistoryEvent): Promise<void>;
+  clearAnalyticsQueue(): Promise<void>;
 }

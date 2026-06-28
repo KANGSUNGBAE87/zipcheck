@@ -1,5 +1,5 @@
 import type { CaseItem, HistoryEvent } from '../domain';
-import { appendAnalyticsEvent, loadAnalyticsQueue, loadCases, saveCases } from '../storage';
+import { appendAnalyticsEvent, clearAnalyticsQueue, loadAnalyticsQueue, loadCases, saveCases } from '../storage';
 import type { CaseRepository, RepositoryStatus } from './caseRepository';
 
 export class LocalStorageCaseRepository implements CaseRepository {
@@ -26,5 +26,9 @@ export class LocalStorageCaseRepository implements CaseRepository {
 
   async appendAnalyticsEvent(event: HistoryEvent): Promise<void> {
     appendAnalyticsEvent(event);
+  }
+
+  async clearAnalyticsQueue(): Promise<void> {
+    clearAnalyticsQueue();
   }
 }

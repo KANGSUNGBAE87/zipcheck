@@ -4,6 +4,7 @@ import { TEMPLATE, type AlertItem, type CaseItem, type HistoryEvent, type Locale
 import { PROPERTY_OPTIONS, TRANSACTION_OPTIONS, guideTierLabel, propertyLabel, resolveGuide, resolveGuideBranches, resolveGuideSources, transactionLabel } from './guides';
 import { createDefaultBackend } from './backend/defaultBackend';
 import { createBlankCase, createEvent, recomputeActivePhaseKey } from './storage';
+import { loadZipcheckCoreUserId } from './backend/zipcheckSession';
 
 const emitLocaleEvent = (
   history: HistoryEvent[],
@@ -231,7 +232,7 @@ function App() {
         if (!userMutatedBeforeLoad.current) setCases(loadedCases);
         const status = repository.getStatus();
         setRepositoryStatus(status);
-        setSyncMessage(status.message ?? '');
+        if (!userMutatedBeforeLoad.current) setSyncMessage(status.message ?? '');
       })
       .catch((error) => {
         if (!alive) return;
@@ -239,6 +240,27 @@ function App() {
       });
     return () => { alive = false; };
   }, [locale, repository]);
+
+  useEffect(() => {
+    const coreUserId = loadZipcheckCoreUserId();
+    if (!coreUserId || !repositoryStatus.remoteReady) return undefined;
+
+    let alive = true;
+    authAdapter.verifyLocalConnection(coreUserId)
+      .then(async (connected) => {
+        if (!alive) return;
+        if (connected) {
+          setTossLoginState('connected');
+          return;
+        }
+        await authAdapter.signOutLocal();
+        if (alive) setTossLoginState('idle');
+      })
+      .catch(() => {
+        if (alive) setTossLoginState('idle');
+      });
+    return () => { alive = false; };
+  }, [authAdapter, repositoryStatus.remoteReady]);
 
   useEffect(() => {
     if (!selectedId && cases[0]) setSelectedId(cases[0].id);
@@ -458,6 +480,34 @@ function App() {
     } catch (error) {
       setTossLoginState('error');
       setSyncMessage(error instanceof Error ? `${copy[locale].toss_login_failed} ${error.message}` : copy[locale].toss_login_failed);
+    }
+  };
+
+  const disconnectTossLoginLocal = async () => {
+    userMutatedBeforeLoad.current = true;
+    try {
+      await authAdapter.signOutLocal();
+      await repository.saveCases([]);
+      await repository.clearAnalyticsQueue();
+      setCases([]);
+      setSelectedId(null);
+      setDraftTitle('');
+      setDraftMemo('');
+      setMemoTarget('case');
+      setSheetOpen(false);
+      setGuideTargetId(null);
+      setSearchTerm('');
+      setFilter('active');
+      setMobileTab('deals');
+      setViewPhaseKey(null);
+      setMemoFilter('all');
+      setMemoFilterMenuOpen(false);
+      setOpenMemoDropdownId(null);
+      setTossLoginState('idle');
+      setRepositoryStatus(repository.getStatus());
+      setSyncMessage(copy[locale].toss_disconnect_done);
+    } catch (error) {
+      setSyncMessage(error instanceof Error ? error.message : copy[locale].sync_save_failed);
     }
   };
 
@@ -716,7 +766,13 @@ function App() {
           </div>
           <div className="top-actions">
             <div className={`pill ${repositoryStatus.remoteReady ? 'remote' : 'local'}`} title={repositoryStatus.label}><span className="dot" /> {repositoryStatus.remoteReady ? copy[locale].remote_status : copy[locale].local_status}</div>
-            <button className="outline-btn auth-btn" disabled={!repositoryStatus.remoteReady || tossLoginState === 'loading'} onClick={connectTossLogin}>{tossLoginState === 'connected' ? copy[locale].toss_login_connected_short : copy[locale].toss_login}</button>
+            <button
+              className="outline-btn auth-btn"
+              disabled={tossLoginState === 'loading' || (!repositoryStatus.remoteReady && tossLoginState !== 'connected')}
+              onClick={tossLoginState === 'connected' ? disconnectTossLoginLocal : connectTossLogin}
+            >
+              {tossLoginState === 'connected' ? copy[locale].toss_disconnect : copy[locale].toss_login}
+            </button>
           </div>
         </div>
       </header>

@@ -88,7 +88,7 @@ export class SupabaseCaseRepository implements CaseRepository {
       mode: 'supabase',
       label: 'Supabase',
       remoteReady: true,
-      message: '로그인하지 않아도 저장됩니다. 토스 로그인 연결 시 계정에 이어서 보관합니다.',
+      message: '로그인하지 않아도 저장됩니다. Supabase 저장 환경이면 익명 세션으로 원격 저장되고, 없으면 이 기기에 보관합니다.',
     };
   }
 
@@ -127,7 +127,10 @@ export class SupabaseCaseRepository implements CaseRepository {
   async saveCases(cases: CaseItem[]): Promise<void> {
     const ownerAuthUserId = await this.getOwnerAuthUserId();
     const coreUserId = this.getCoreUserId();
-    if (cases.length === 0) return;
+    if (cases.length === 0) {
+      await this.clearOwnerData(ownerAuthUserId);
+      return;
+    }
 
     const caseRows = cases.map((item) => caseToRow(item, ownerAuthUserId, coreUserId));
     const alertRows = cases.flatMap((item) => item.alerts.map((alert, index) => alertToRow(item.id, alert, ownerAuthUserId, index)));
@@ -182,6 +185,14 @@ export class SupabaseCaseRepository implements CaseRepository {
     ensureNoError(await this.supabase.from(ZIPCHECK_TABLES.events).upsert(eventToRow(event, ownerAuthUserId), { onConflict: 'id' }));
   }
 
+  async clearAnalyticsQueue(): Promise<void> {
+    const ownerAuthUserId = await this.getOwnerAuthUserId();
+    ensureNoError(await this.supabase
+      .from(ZIPCHECK_TABLES.events)
+      .delete()
+      .eq('owner_auth_user_id', ownerAuthUserId));
+  }
+
   private async getOwnerAuthUserId(): Promise<string> {
     const pending = ownerAuthUserIdRequests.get(this.supabase);
     if (pending) return pending;
@@ -202,5 +213,17 @@ export class SupabaseCaseRepository implements CaseRepository {
     const userId = signInResponse.data.user?.id;
     if (!userId) throw new Error('Supabase auth session is unavailable.');
     return userId;
+  }
+
+  private async clearOwnerData(ownerAuthUserId: string): Promise<void> {
+    await Promise.all([
+      this.supabase.from(ZIPCHECK_TABLES.caseAlerts).delete().eq('owner_auth_user_id', ownerAuthUserId),
+      this.supabase.from(ZIPCHECK_TABLES.memos).delete().eq('owner_auth_user_id', ownerAuthUserId),
+    ].map(async (request) => ensureNoError(await request)));
+
+    ensureNoError(await this.supabase
+      .from(ZIPCHECK_TABLES.cases)
+      .delete()
+      .eq('owner_auth_user_id', ownerAuthUserId));
   }
 }

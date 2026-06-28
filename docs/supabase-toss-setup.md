@@ -1,7 +1,7 @@
 ---
-version: 1.2
+version: 1.4
 status: current_setup_note
-updated: 2026-06-27 KST
+updated: 2026-06-28 KST
 project: zipcheck
 canonical: true
 ---
@@ -60,15 +60,15 @@ Relevant official references:
 - https://developers-apps-in-toss.toss.im/development/test/toss.md
 - https://developers-apps-in-toss.toss.im/tutorials/webview.md
 
-## Disconnect / Retention Draft
+## Disconnect / Retention
 
-This is the current P1 policy draft. It is not yet implemented as UI/backend behavior.
+This is now implemented as release-prep behavior for local disconnect and server callback intake. Final product/legal wording and Apps in Toss Console values remain Owner-gated.
 
-- `logout` means local session disconnect only: clear cached `zipcheck:core-user-id:v1` and connected-account UI state, but keep local cases, memos, and checklist state on the device unless the user separately deletes them.
-- `unlink` means provider identity detachment on the server: set the identity mapping inactive/unlinked, clear active app session rows where applicable, and stop using that Toss identity for future sync until the user links again.
-- Re-login with the same verified Toss identity may relink to the same internal `core_users.id` only when the retained identity row and product policy allow it.
-- Do not hard-delete `zipcheck_cases`, `zipcheck_case_alerts`, `zipcheck_memos`, or `zipcheck_events` on simple logout.
-- Before public release, add user-facing copy that explains what stays local, what syncs after login, and what unlink/delete requests do.
+- `logout` / local disconnect means current-device disconnect and cleanup: clear cached `zipcheck:core-user-id:v1`, connected-account UI state, local fallback cases, memos, and checklist state.
+- `unlink` means provider identity detachment and app-data cleanup on the server: set `authmap_user_identities.unlinked_at`, preserve provider metadata, delete matching `zipcheck_app_sessions`, delete matching ZipCheck cases/checklist/memos/events, and stop using that Toss identity for future sync until the user links again.
+- Re-login with the same verified Toss identity relinks the retained identity row to the same internal `core_users.id` and clears `unlinked_at` without inserting a duplicate `(provider, provider_subject)` row.
+- App startup verifies `zipcheck:core-user-id:v1` against the server status path before showing connected UI; stale markers are cleared.
+- Before public release, Owner must approve user-facing copy that explains what stays local, what syncs after login, and what unlink/delete requests do.
 - Never write raw Toss IDs, Toss tokens, authorization codes, service role keys, or mTLS material to browser state, localStorage, analytics events, screenshots, or public docs.
 
 Official Toss callback reasons to support in the server path:
@@ -77,7 +77,22 @@ Official Toss callback reasons to support in the server path:
 - `WITHDRAWAL_TERMS`: the user withdraws login-service terms consent.
 - `WITHDRAWAL_TOSS`: the user leaves Toss.
 
-For all three callbacks, ZipCheck should end/clear active app sessions, revoke or discard server-held Toss tokens, mark the provider identity inactive/unlinked, and show re-login guidance when the user next needs sync.
+For all three callbacks, ZipCheck supports the official Apps in Toss `GET` or `POST` callback shape with `userKey` and `referrer` behind Basic Auth. The Edge Function immediately hashes `userKey` with `TOSS_USER_KEY_HASH_SECRET` to compare against `providerSubjectHash`; it never stores raw `userKey`. The same route also supports an internal gateway shape with `providerSubjectHash` plus a server-only `TOSS_DISCONNECT_CALLBACK_SECRET`. The Edge Function path is `/disconnect` under `zipcheck-toss-login`.
+
+Server-only callback/env placeholders:
+
+```bash
+TOSS_LOGIN_TOKEN_EXCHANGE_URL=
+TOSS_DISCONNECT_CALLBACK_SECRET=
+TOSS_DISCONNECT_CALLBACK_BASIC_USERNAME=
+TOSS_DISCONNECT_CALLBACK_BASIC_PASSWORD=
+TOSS_USER_KEY_HASH_SECRET=
+ZIPCHECK_ALLOWED_ORIGINS=
+APPS_IN_TOSS_WEB_HOST=
+APPS_IN_TOSS_ICON_URL=
+```
+
+`ZIPCHECK_ALLOWED_ORIGINS` should include the Apps in Toss live and private QR-test origins once the final app name is known. If it is unset, the Edge Function keeps the local/sandbox-compatible CORS fallback.
 
 ## Sandbox / WebView QA Gate
 
@@ -89,6 +104,6 @@ For all three callbacks, ZipCheck should end/clear active app sessions, revoke o
 
 ## Current Scope
 
-- Implemented and applied: adapters, UI connection state, migration file, remote SQL, RLS/grants, anonymous sign-ins, Edge Function deployment, local `.env.local`, tests.
-- Still missing: production Toss mTLS token exchange endpoint, real Apps in Toss sandbox login QA, implemented unlink/logout remote cleanup flow, real-device/WebView QA.
-- Excluded: AI, ads, IAP, store release prep, legal advice.
+- Implemented and applied: adapters, UI connection state, startup status verification, stale-marker clearing, same-identity relink, local disconnect cleanup, migration files, remote SQL/RLS prep, anonymous sign-ins, latest Edge Function deployment, official/internal disconnect callback intake/cleanup, local `.env.local`, tests, release preflight docs.
+- Still missing for final public launch: production Toss mTLS token exchange endpoint, real Apps in Toss sandbox login QA, registered disconnect callback proof, `.ait` upload/QR test, real-device/WebView QA, Owner-approved privacy/data disclosure.
+- Excluded: AI, ads, IAP, Google Play release prep unless explicitly requested, legal advice. Apps in Toss release prep remains part of final public-launch completion.

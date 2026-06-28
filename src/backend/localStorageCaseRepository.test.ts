@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { TEMPLATE } from '../domain';
-import { CASES_KEY, createBlankCase, createEvent } from '../storage';
+import { CASES_KEY, EVENTS_KEY, createBlankCase, createEvent } from '../storage';
 import { LocalStorageCaseRepository } from './localStorageCaseRepository';
 
 describe('LocalStorageCaseRepository', () => {
@@ -49,5 +49,21 @@ describe('LocalStorageCaseRepository', () => {
     const [loaded] = await repository.loadCases();
     expect(loaded.memos).toEqual([]);
     expect(loaded.alerts[0].memoIds).toEqual([]);
+  });
+
+  it('clears local fallback cases and analytics for release disconnect cleanup', async () => {
+    const repository = new LocalStorageCaseRepository();
+    const item = createBlankCase(TEMPLATE, '로컬 연결 끊김 정리 거래', 'ko');
+    const event = createEvent('case_opened', { caseId: item.id, payload: { locale: 'ko' } });
+
+    await repository.saveCases([item]);
+    await repository.appendAnalyticsEvent(event);
+    await repository.saveCases([]);
+    await repository.clearAnalyticsQueue();
+
+    expect(await repository.loadCases()).toEqual([]);
+    expect(await repository.loadAnalyticsQueue()).toEqual([]);
+    expect(localStorage.getItem(CASES_KEY)).toBe('[]');
+    expect(localStorage.getItem(EVENTS_KEY)).toBe('[]');
   });
 });

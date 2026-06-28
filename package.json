@@ -6,6 +6,8 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
+    "build:ait": "npm run build && ait build",
+    "preflight:apps-in-toss": "node scripts/apps-in-toss-preflight.mjs",
     "typecheck": "tsc --noEmit",
     "test": "vitest run"
   },

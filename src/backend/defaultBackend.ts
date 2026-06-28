@@ -5,7 +5,8 @@ import type { CaseRepository } from './caseRepository';
 import { LocalStorageCaseRepository } from './localStorageCaseRepository';
 import { SupabaseCaseRepository } from './supabaseCaseRepository';
 import { createBrowserSupabaseClient, type SupabaseEnv } from './supabaseClient';
-import { createSupabaseTossLoginExchange } from './tossLoginBackend';
+import { createSupabaseTossConnectionStatusCheck, createSupabaseTossLoginExchange } from './tossLoginBackend';
+import { clearZipcheckCoreUserId } from './zipcheckSession';
 
 export type BackendOptions = {
   env?: SupabaseEnv;
@@ -16,6 +17,12 @@ export type BackendOptions = {
 const unavailableTossAuthAdapter = (): AppsInTossAuthAdapter => ({
   async signInWithToss() {
     throw new Error('Supabase public env is not configured for Toss login.');
+  },
+  async signOutLocal() {
+    clearZipcheckCoreUserId();
+  },
+  async verifyLocalConnection() {
+    return false;
   },
 });
 
@@ -34,6 +41,8 @@ export const createDefaultAppsInTossAuthAdapter = (options: BackendOptions = {})
   return createAppsInTossAuthAdapter({
     appLogin: options.appLogin,
     exchangeTossLogin: createSupabaseTossLoginExchange(supabase),
+    verifyConnection: createSupabaseTossConnectionStatusCheck(supabase),
+    signOutLocal: clearZipcheckCoreUserId,
   });
 };
 
@@ -45,6 +54,8 @@ export const createDefaultBackend = (options: BackendOptions = {}) => {
       ? createAppsInTossAuthAdapter({
         appLogin: options.appLogin,
         exchangeTossLogin: createSupabaseTossLoginExchange(supabase),
+        verifyConnection: createSupabaseTossConnectionStatusCheck(supabase),
+        signOutLocal: clearZipcheckCoreUserId,
       })
       : unavailableTossAuthAdapter(),
   };

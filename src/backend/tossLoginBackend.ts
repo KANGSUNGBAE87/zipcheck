@@ -1,5 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
-import type { TossLoginExchange, TossLoginExchangeResult } from '../platform/tossAuth';
+import type { TossConnectionStatusCheck, TossLoginExchange, TossLoginExchangeResult } from '../platform/tossAuth';
 import { saveZipcheckCoreUserId } from './zipcheckSession';
 
 const normalizeExchangeResult = (value: unknown): TossLoginExchangeResult => {
@@ -24,4 +24,13 @@ export const createSupabaseTossLoginExchange = (supabase: SupabaseClient): TossL
   const result = normalizeExchangeResult(response.data);
   if (result.coreUserId) saveZipcheckCoreUserId(result.coreUserId);
   return result;
+};
+
+export const createSupabaseTossConnectionStatusCheck = (supabase: SupabaseClient): TossConnectionStatusCheck => async (coreUserId) => {
+  const response = await supabase.functions.invoke('zipcheck-toss-login', {
+    body: { action: 'status', coreUserId },
+  });
+  if (response.error) return false;
+  const data = response.data as { connected?: unknown } | null;
+  return data?.connected === true;
 };

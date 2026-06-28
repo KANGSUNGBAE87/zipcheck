@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="ZIPCHECK">
+  <rect width="512" height="512" rx="96" fill="#1B7059"/>
+  <path d="M130 150c0-26 21-47 47-47h158c26 0 47 21 47 47v212c0 26-21 47-47 47H177c-26 0-47-21-47-47V150Z" fill="#F7F1E7"/>
+  <path d="M177 103h158c26 0 47 21 47 47v24H130v-24c0-26 21-47 47-47Z" fill="#FFFFFF" opacity=".9"/>
+  <path d="M185 238h94M185 307h78" stroke="#173F4F" stroke-width="32" stroke-linecap="round"/>
+  <path d="m192 368 48 48 104-123" fill="none" stroke="#B76A12" stroke-width="34" stroke-linecap="round" stroke-linejoin="round"/>
+  <circle cx="337" cy="174" r="28" fill="#B76A12"/>
+</svg>

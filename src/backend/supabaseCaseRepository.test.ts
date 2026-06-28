@@ -204,6 +204,26 @@ describe('SupabaseCaseRepository row mapping', () => {
     expect((await repository.loadCases())[0].memos).toEqual([]);
   });
 
+  it('clears remote owner rows when saving an empty release-disconnect snapshot', async () => {
+    const db = emptyDb();
+    const repository = new SupabaseCaseRepository(createFakeSupabase(db) as unknown as SupabaseClient, () => 'core-user-1');
+    const item = createBlankCase(TEMPLATE, '원격 연결 끊김 정리 거래', 'ko');
+    const event = createEvent('case_opened', { caseId: item.id, payload: { locale: 'ko' } });
+
+    await repository.saveCases([{ ...item, history: [...item.history, event] }]);
+    expect(db[ZIPCHECK_TABLES.cases]).toHaveLength(1);
+    expect(db[ZIPCHECK_TABLES.caseAlerts].length).toBeGreaterThan(0);
+    expect(db[ZIPCHECK_TABLES.events].length).toBeGreaterThan(0);
+
+    await repository.saveCases([]);
+    await repository.clearAnalyticsQueue();
+
+    expect(db[ZIPCHECK_TABLES.cases]).toEqual([]);
+    expect(db[ZIPCHECK_TABLES.caseAlerts]).toEqual([]);
+    expect(db[ZIPCHECK_TABLES.memos]).toEqual([]);
+    expect(db[ZIPCHECK_TABLES.events]).toEqual([]);
+  });
+
   it('sanitizes remote analytics payloads on append and load', async () => {
     const db = emptyDb();
     const repository = new SupabaseCaseRepository(createFakeSupabase(db) as unknown as SupabaseClient, () => 'core-user-1');

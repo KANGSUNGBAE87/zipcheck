@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, cleanup, within } from '@testing-library/react';
+import { fireEvent, render, screen, cleanup, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import App from './App';
 import { CASES_KEY, EVENTS_KEY } from './storage';
@@ -54,6 +54,14 @@ describe('App broker checklist', () => {
     expect(screen.getAllByRole('button', { name: '새 거래 시작' }).length).toBeGreaterThan(0);
     expect(screen.getAllByRole('button', { name: '샘플 거래로 둘러보기' }).length).toBeGreaterThan(0);
     expect(screen.queryByText(/진행 중 거래 ·/)).not.toBeInTheDocument();
+  });
+
+  it('does not trust a stale Toss marker without remote verification', () => {
+    localStorage.setItem('zipcheck:core-user-id:v1', 'core-user-1');
+    render(<App />);
+
+    expect(screen.queryByRole('button', { name: '토스 연결 해제' })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '토스 로그인' })).toBeDisabled();
   });
 
   it('keeps the new deal form above the deal list, removes plus-only create, and hides English UI', () => {
@@ -199,7 +207,7 @@ describe('App broker checklist', () => {
     expect(stored).toHaveLength(1);
     expect(stored[0].history.some((event: { type: string; payload?: { firstEntry?: boolean; locale?: string } }) => event.type === 'session_start' && event.payload?.firstEntry && event.payload?.locale === 'ko')).toBe(true);
     expect(screen.getAllByText(/지금 확인할 항목/).length).toBeGreaterThan(0);
-    expect(screen.getAllByText('로그인하지 않아도 저장됩니다. 토스 로그인 연결 시 계정에 이어서 보관합니다.')[0]).toBeInTheDocument();
+    expect(screen.getAllByText('로그인하지 않아도 저장됩니다. Supabase 저장 환경이면 익명 세션으로 원격 저장되고, 없으면 이 기기에 보관합니다.')[0]).toBeInTheDocument();
     expect(screen.queryByText('Back')).not.toBeInTheDocument();
     const analytics = JSON.parse(localStorage.getItem(EVENTS_KEY) ?? '[]');
     expect(analytics.some((event: { type: string; payload?: { locale?: string; phaseKey?: string } }) => event.type === 'phase_viewed' && event.payload?.phaseKey === 'pre_contract' && event.payload?.locale === 'ko')).toBe(true);
@@ -243,11 +251,11 @@ describe('App broker checklist', () => {
 
     expect(screen.getAllByText('0 / 12 완료')[0]).toBeInTheDocument();
     expect(screen.getAllByText('잔금일 참고').length).toBeGreaterThan(0);
-    expect(screen.getAllByText('로그인하지 않아도 저장됩니다. 토스 로그인 연결 시 계정에 이어서 보관합니다.')[0]).toBeInTheDocument();
+    expect(screen.getAllByText('로그인하지 않아도 저장됩니다. Supabase 저장 환경이면 익명 세션으로 원격 저장되고, 없으면 이 기기에 보관합니다.')[0]).toBeInTheDocument();
     expect(screen.getByText('완료에 포함되지 않는 참고자료 4개')).toBeInTheDocument();
     expect(screen.getAllByRole('button').some((button) => button.textContent === '○')).toBe(true);
     expect(screen.getByText('완료에 포함되지 않는 참고자료 4개')).toBeInTheDocument();
-    expect(screen.getAllByText('로그인하지 않아도 저장됩니다. 토스 로그인 연결 시 계정에 이어서 보관합니다.')[0]).toBeInTheDocument();
+    expect(screen.getAllByText('로그인하지 않아도 저장됩니다. Supabase 저장 환경이면 익명 세션으로 원격 저장되고, 없으면 이 기기에 보관합니다.')[0]).toBeInTheDocument();
     expect(screen.getAllByText('계약 전').length).toBeGreaterThan(0);
 
     // Verify accessibility label for reference-only button
@@ -427,7 +435,7 @@ describe('App broker checklist', () => {
     fireEvent.change(screen.getByRole('textbox', { name: '거래명' }), { target: { value: '되돌리기 검증' } });
     clickButtonByText('새 거래 시작');
 
-    expect(screen.getAllByText('로그인하지 않아도 저장됩니다. 토스 로그인 연결 시 계정에 이어서 보관합니다.')[0]).toBeInTheDocument();
+    expect(screen.getAllByText('로그인하지 않아도 저장됩니다. Supabase 저장 환경이면 익명 세션으로 원격 저장되고, 없으면 이 기기에 보관합니다.')[0]).toBeInTheDocument();
 
     fireEvent.click(screen.getAllByRole('button', { name: /완료하기/ })[0]);
     expect(screen.getByText('완료 직후에는 바로 되돌릴 수 있습니다.')).toBeInTheDocument();

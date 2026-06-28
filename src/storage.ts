@@ -122,6 +122,8 @@ export const loadAnalyticsQueue = (): HistoryEvent[] => {
 
 export const saveAnalyticsQueue = (events: HistoryEvent[]) => localStorage.setItem(EVENTS_KEY, JSON.stringify(events.map(sanitizeAnalyticsEvent)));
 
+export const clearAnalyticsQueue = () => saveAnalyticsQueue([]);
+
 export const appendAnalyticsEvent = (event: HistoryEvent) => {
   const next = [...loadAnalyticsQueue(), event];
   saveAnalyticsQueue(next);
